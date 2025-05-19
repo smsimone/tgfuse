@@ -37,24 +37,35 @@ func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+
+	// start := off
+
+	end := off + int64(len(dest))
+	if end > int64(cf.File.OriginalSize) {
+		end = int64(cf.File.OriginalSize)
+	}
+
+	var curr int64 = 0
+
 	wg := sync.WaitGroup{}
 	for idx := range cf.File.Chunks {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := cf.File.Chunks[idx].FetchBuffer(); err != nil {
-				log.Println("Failed to download chunk item buf", err)
-			}
-		}()
+		ci := cf.File.Chunks[idx]
+
+		if curr+int64(ci.Size) <= end {
+
+		}
+
+		// wg.Add(1)
+		// go func() {
+		// 	defer wg.Done()
+		// 	if err := cf.File.Chunks[idx].FetchBuffer(); err != nil {
+		// 		log.Println("Failed to download chunk item buf", err)
+		// 	}
+		// }()
 	}
 	wg.Wait()
 
 	bytes := cf.File.GetBytes()
-
-	end := off + int64(len(dest))
-	if end > int64(len(bytes)) {
-		end = int64(len(bytes))
-	}
 
 	log.Println("Reading", end-off, "bytes")
 
