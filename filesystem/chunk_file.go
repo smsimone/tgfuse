@@ -51,6 +51,38 @@ func ReadChunkfile(filepath string) (*ChunkFile, error) {
 	return &cf, nil
 }
 
+func FetchFromEtcd() (*[]ChunkFile, error) {
+	cfIds, err := database.GetAllFileIds()
+	if err != nil {
+		return nil, err
+	}
+
+	chunkFiles := []ChunkFile{}
+	for _, cfId := range *cfIds {
+		cf := ChunkFile{Id: cfId, Chunks: []ChunkItem{}}
+
+		if err := database.Restore(&cf); err != nil {
+			fmt.Println("Failed to restore cf", err)
+			return nil, err
+		}
+
+		for ciIdx := range cf.NumChunks {
+			fmt.Println("Restoring chunk id", ciIdx)
+			ci := ChunkItem{Idx: ciIdx, chunkFileId: cfId}
+
+			if err := database.Restore(&ci); err != nil {
+				fmt.Println("Failed to restore cf", err)
+				return nil, err
+			}
+			cf.Chunks = append(cf.Chunks, ci)
+		}
+
+		chunkFiles = append(chunkFiles, cf)
+	}
+
+	return &chunkFiles, nil
+}
+
 func (cf *ChunkFile) UploadToDatabase() error {
 	if err := database.SendFile(cf); err != nil {
 		fmt.Printf("Failed to send ChunkFile to database: %s", err.Error())
@@ -58,7 +90,7 @@ func (cf *ChunkFile) UploadToDatabase() error {
 	}
 
 	for _, chunk := range cf.Chunks {
-		if err := database.SendFile(chunk); err != nil {
+		if err := database.SendFile(&chunk); err != nil {
 			fmt.Printf("Failed to send ChunkItem to database: %s", err.Error())
 			return err
 		}

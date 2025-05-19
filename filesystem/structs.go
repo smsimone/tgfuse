@@ -23,7 +23,7 @@ type ChunkFile struct {
 	Chunks           []ChunkItem
 }
 
-func (c ChunkFile) GetKeyParams() []database.KeyParam {
+func (c *ChunkFile) GetKeyParams() []database.KeyParam {
 	return []database.KeyParam{
 		{
 			Key: fmt.Sprintf("/cf/%s/filename", c.Id),
@@ -67,8 +67,8 @@ type ChunkItem struct {
 	chunkFileId string
 }
 
-func (c ChunkItem) GetKeyParams() []database.KeyParam {
-	params := []database.KeyParam{
+func (c *ChunkItem) GetKeyParams() []database.KeyParam {
+	return []database.KeyParam{
 		{
 			Key: fmt.Sprintf("/ci/%s/%d/size", c.chunkFileId, c.Idx),
 			GetValue: func() string {
@@ -87,19 +87,14 @@ func (c ChunkItem) GetKeyParams() []database.KeyParam {
 				c.Name = s
 			},
 		},
-	}
-
-	if c.FileId != nil {
-		params = append(params, database.KeyParam{
+		{
 			Key: fmt.Sprintf("/ci/%s/%d/file_id", c.chunkFileId, c.Idx),
 			GetValue: func() string {
 				return *c.FileId
 			},
 			SetValue: func(s string) {
-				c.Name = *c.FileId
+				c.FileId = &s
 			},
-		})
+		},
 	}
-
-	return params
 }

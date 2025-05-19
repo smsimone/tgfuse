@@ -8,6 +8,9 @@ import (
 )
 
 func main() {
+	restore()
+	os.Exit(0)
+
 	args := os.Args
 	if len(args) < 2 {
 		fmt.Println("Missing file")
@@ -37,4 +40,26 @@ func main() {
 		fmt.Println("Failed to upload file", err)
 	}
 	fmt.Println("Uploaded keys to etcd server")
+
+	files, err := filesystem.FetchFromEtcd()
+	if err != nil {
+		fmt.Println("Failed to restore from etcd", err)
+		os.Exit(1)
+	}
+
+	for _, cf := range *files {
+		fmt.Println(cf.Id, cf.NumChunks)
+	}
+}
+
+func restore() {
+	files, err := filesystem.FetchFromEtcd()
+	if err != nil {
+		fmt.Println("Failed to restore from etcd", err)
+		os.Exit(1)
+	}
+
+	for _, cf := range *files {
+		fmt.Println(cf.Id, cf.NumChunks)
+	}
 }
