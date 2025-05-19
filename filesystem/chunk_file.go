@@ -7,6 +7,7 @@ import (
 	"io"
 	"it.smaso/tgfuse/configs"
 	"it.smaso/tgfuse/database"
+	"log"
 	"os"
 	"path"
 	"slices"
@@ -57,7 +58,7 @@ func FetchFromEtcd() (*[]ChunkFile, error) {
 		return nil, err
 	}
 
-	chunkFiles := []ChunkFile{}
+	var chunkFiles []ChunkFile
 	for _, cfId := range *cfIds {
 		cf := ChunkFile{Id: cfId, Chunks: []ChunkItem{}}
 
@@ -66,18 +67,16 @@ func FetchFromEtcd() (*[]ChunkFile, error) {
 			return nil, err
 		}
 
-		ch := make(chan error)
 		wg := sync.WaitGroup{}
 
 		for ciIdx := range cf.NumChunks {
+			wg.Add(1)
 			go func() {
-				wg.Add(1)
 				defer wg.Done()
 
 				ci := ChunkItem{Idx: ciIdx, chunkFileId: cfId}
 				if err := database.Restore(&ci); err != nil {
-					fmt.Println("Failed to restore cf", err)
-					ch <- err
+					log.Println("Failed to restore cf", err)
 				} else {
 					cf.Chunks = append(cf.Chunks, ci)
 				}
