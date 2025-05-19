@@ -16,6 +16,7 @@ const (
 )
 
 type ChunkFile struct {
+	Ino              uint64
 	Id               string
 	OriginalFilename string
 	OriginalSize     int

@@ -3,14 +3,14 @@ package filesystem
 import (
 	"bytes"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
+	"it.smaso/tgfuse/configs"
+	"it.smaso/tgfuse/database"
 	"os"
 	"path"
 	"slices"
-
-	"github.com/google/uuid"
-	"it.smaso/tgfuse/configs"
-	"it.smaso/tgfuse/database"
+	"sync"
 )
 
 func ReadChunkfile(filepath string) (*ChunkFile, error) {
@@ -66,16 +66,25 @@ func FetchFromEtcd() (*[]ChunkFile, error) {
 			return nil, err
 		}
 
-		for ciIdx := range cf.NumChunks {
-			fmt.Println("Restoring chunk id", ciIdx)
-			ci := ChunkItem{Idx: ciIdx, chunkFileId: cfId}
+		ch := make(chan error)
+		wg := sync.WaitGroup{}
 
-			if err := database.Restore(&ci); err != nil {
-				fmt.Println("Failed to restore cf", err)
-				return nil, err
-			}
-			cf.Chunks = append(cf.Chunks, ci)
+		for ciIdx := range cf.NumChunks {
+			go func() {
+				wg.Add(1)
+				defer wg.Done()
+
+				ci := ChunkItem{Idx: ciIdx, chunkFileId: cfId}
+				if err := database.Restore(&ci); err != nil {
+					fmt.Println("Failed to restore cf", err)
+					ch <- err
+				} else {
+					cf.Chunks = append(cf.Chunks, ci)
+				}
+			}()
 		}
+
+		wg.Wait()
 
 		chunkFiles = append(chunkFiles, cf)
 	}
@@ -101,6 +110,14 @@ func (cf *ChunkFile) UploadToDatabase() error {
 	}
 
 	return nil
+}
+
+func (cf *ChunkFile) GetBytes() []byte {
+	var b []byte
+	for _, chunk := range cf.Chunks {
+		b = append(b, chunk.Buf.Bytes()...)
+	}
+	return b
 }
 
 func (cf *ChunkFile) WriteFile(outFile string) error {

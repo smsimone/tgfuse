@@ -3,33 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/hanwen/go-fuse/v2/fs"
+	"it.smaso/tgfuse/filesystem"
+	"it.smaso/tgfuse/tgfuse"
 	"log"
 	"os"
 	"syscall"
-
-	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
 )
-
-type TgFuse struct {
-	fs.Inode
-}
-
-func (tg *TgFuse) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
-	out.Mode = 0755
-	return 0
-}
-
-func (r *TgFuse) OnAdd(ctx context.Context) {
-	ch := r.NewPersistentInode(
-		ctx, &fs.MemRegularFile{
-			Data: []byte("file.txt"),
-			Attr: fuse.Attr{
-				Mode: 0644,
-			},
-		}, fs.StableAttr{Ino: 2})
-	r.AddChild("file.txt", ch, false)
-}
 
 func main() {
 	args := os.Args
@@ -38,10 +18,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	server, err := fs.Mount(args[1], &TgFuse{}, &fs.Options{})
+	root := &fs.Inode{}
+
+	server, err := fs.Mount(args[1], root, &fs.Options{})
+
+	go func() {
+		files, _ := filesystem.FetchFromEtcd()
+		for idx := range *files {
+			ctx := context.Background()
+			file := tgfuse.CfInode{
+				File: &(*files)[idx],
+			}
+			ch := root.NewPersistentInode(
+				ctx,
+				&file,
+				fs.StableAttr{Mode: syscall.S_IFREG},
+			)
+			root.AddChild((*files)[idx].OriginalFilename, ch, true)
+		}
+		log.Println("Added all the entries to root")
+	}()
+
 	if err != nil {
 		log.Fatalf("Mount failed: %v\n", err)
 	}
+	log.Println("Mounted successfully")
 	server.Wait()
 }
 

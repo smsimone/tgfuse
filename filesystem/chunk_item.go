@@ -26,10 +26,14 @@ func (ci *ChunkItem) Send() error {
 }
 
 func (ci *ChunkItem) FetchBuffer() error {
+	if ci.FileState == MEMORY {
+		return nil
+	}
 	bts, err := telegram.DownloadFile(*ci.FileId)
 	if err != nil {
 		return err
 	}
 	ci.Buf = bytes.NewBuffer(*bts)
+	ci.FileState = MEMORY
 	return nil
 }
