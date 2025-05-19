@@ -2,8 +2,9 @@ package database
 
 import (
 	"context"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 func getClient() (*clientv3.Client, error) {
@@ -26,6 +27,22 @@ func putKey(key, val string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	_, err = cli.Put(ctx, key, val)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func delKey(key string) error {
+	cli, err := getClient()
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err = cli.Delete(ctx, key)
 	if err != nil {
 		return err
 	}

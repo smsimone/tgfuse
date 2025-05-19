@@ -3,8 +3,9 @@ package filesystem
 import (
 	"bytes"
 	"fmt"
-	"it.smaso/tgfuse/database"
 	"strconv"
+
+	"it.smaso/tgfuse/database"
 )
 
 type Status = string
@@ -25,7 +26,7 @@ type ChunkFile struct {
 func (c ChunkFile) GetKeyParams() []database.KeyParam {
 	return []database.KeyParam{
 		{
-			Key: fmt.Sprintf("/ci/%s/filename", c.Id),
+			Key: fmt.Sprintf("/cf/%s/filename", c.Id),
 			GetValue: func() string {
 				return c.OriginalFilename
 			},
@@ -34,7 +35,7 @@ func (c ChunkFile) GetKeyParams() []database.KeyParam {
 			},
 		},
 		{
-			Key: fmt.Sprintf("/ci/%s/size", c.Id),
+			Key: fmt.Sprintf("/cf/%s/size", c.Id),
 			GetValue: func() string {
 				return fmt.Sprintf("%d", c.OriginalSize)
 			},
@@ -44,7 +45,7 @@ func (c ChunkFile) GetKeyParams() []database.KeyParam {
 			},
 		},
 		{
-			Key: fmt.Sprintf("/ci/%s/num_chunks", c.Id),
+			Key: fmt.Sprintf("/cf/%s/num_chunks", c.Id),
 			GetValue: func() string {
 				return fmt.Sprintf("%d", c.NumChunks)
 			},
@@ -57,10 +58,48 @@ func (c ChunkFile) GetKeyParams() []database.KeyParam {
 }
 
 type ChunkItem struct {
-	Idx       int
-	Size      int
-	Name      string
-	Buf       *bytes.Buffer
-	FileId    *string
-	FileState Status
+	Idx         int
+	Size        int
+	Name        string
+	Buf         *bytes.Buffer
+	FileId      *string
+	FileState   Status
+	chunkFileId string
+}
+
+func (c ChunkItem) GetKeyParams() []database.KeyParam {
+	params := []database.KeyParam{
+		{
+			Key: fmt.Sprintf("/ci/%s/%d/size", c.chunkFileId, c.Idx),
+			GetValue: func() string {
+				return strconv.Itoa(c.Size)
+			},
+			SetValue: func(s string) {
+				c.Size, _ = strconv.Atoi(s)
+			},
+		},
+		{
+			Key: fmt.Sprintf("/ci/%s/%d/name", c.chunkFileId, c.Idx),
+			GetValue: func() string {
+				return c.Name
+			},
+			SetValue: func(s string) {
+				c.Name = s
+			},
+		},
+	}
+
+	if c.FileId != nil {
+		params = append(params, database.KeyParam{
+			Key: fmt.Sprintf("/ci/%s/%d/file_id", c.chunkFileId, c.Idx),
+			GetValue: func() string {
+				return *c.FileId
+			},
+			SetValue: func(s string) {
+				c.Name = *c.FileId
+			},
+		})
+	}
+
+	return params
 }

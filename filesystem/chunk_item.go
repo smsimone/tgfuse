@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"bytes"
+
 	"it.smaso/tgfuse/telegram"
 )
 
@@ -14,9 +15,11 @@ func (ci *ChunkItem) GetName() string {
 }
 
 func (ci *ChunkItem) Send() error {
-	if err := telegram.SendFile(ci); err != nil {
+	fileId, err := telegram.SendFile(ci)
+	if err != nil {
 		return err
 	}
+	ci.FileId = fileId
 	ci.Buf = nil
 	ci.FileState = UPLOADED
 	return nil
