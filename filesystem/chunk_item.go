@@ -24,3 +24,12 @@ func (ci *ChunkItem) Send() error {
 	ci.FileState = UPLOADED
 	return nil
 }
+
+func (ci *ChunkItem) FetchBuffer() error {
+	bts, err := telegram.DownloadFile(*ci.FileId)
+	if err != nil {
+		return err
+	}
+	ci.Buf = bytes.NewBuffer(*bts)
+	return nil
+}

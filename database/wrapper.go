@@ -27,8 +27,8 @@ func Restore(obj Keyed) error {
 		if err != nil {
 			return SendKeyErr{Key: item.Key, Err: err}
 		}
+		fmt.Println("Retrieved key to etcd", item.Key, val)
 		item.SetValue(val)
-		fmt.Println("Retrieved key to etcd", item.Key)
 	}
 	return nil
 }

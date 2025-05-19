@@ -90,11 +90,34 @@ func (cf *ChunkFile) UploadToDatabase() error {
 	}
 
 	for _, chunk := range cf.Chunks {
+		if chunk.FileId == nil {
+			fmt.Println("Somehow the file id came null")
+			os.Exit(1)
+		}
 		if err := database.SendFile(&chunk); err != nil {
 			fmt.Printf("Failed to send ChunkItem to database: %s", err.Error())
 			return err
 		}
 	}
 
+	return nil
+}
+
+func (cf *ChunkFile) WriteFile(outFile string) error {
+	file, err := os.OpenFile(outFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Println("Failed to open output file", err)
+		return err
+	}
+	defer file.Close()
+
+	for _, chunk := range cf.Chunks {
+		if chunk.Buf == nil {
+			return fmt.Errorf("Buffer was nil for chunk %d", chunk.Idx)
+		}
+		file.Write(chunk.Buf.Bytes())
+	}
+
+	fmt.Println("Wrote file", outFile)
 	return nil
 }

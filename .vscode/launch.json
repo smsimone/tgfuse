@@ -9,7 +9,10 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "main.go"
+            "program": "main.go",
+            "args": [
+                "/Users/antlia/Development/tg_fuse/resources/test_file.pdf"
+            ]
         }
     ]
 }
