@@ -66,6 +66,9 @@ type ChunkItem struct {
 	FileId      *string
 	FileState   Status
 	chunkFileId string
+
+	Start int64
+	End   int64
 }
 
 func (c *ChunkItem) GetKeyParams() []database.KeyParam {

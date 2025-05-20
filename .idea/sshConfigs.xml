@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig host="localhost" id="58e365d4-dae7-42c0-afd8-7d28895315e3" keyPath="$USER_HOME$/.orbstack/ssh/id_ed25519" port="32222" nameFormat="DESCRIPTIVE" username="default" useOpenSSHConfig="true" />
+    </configs>
+  </component>
+</project>

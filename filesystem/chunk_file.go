@@ -69,15 +69,18 @@ func FetchFromEtcd() (*[]ChunkFile, error) {
 
 		wg := sync.WaitGroup{}
 
+		var curr int64 = 0
 		for ciIdx := range cf.NumChunks {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 
-				ci := ChunkItem{Idx: ciIdx, chunkFileId: cfId}
+				ci := ChunkItem{Idx: ciIdx, chunkFileId: cfId, Start: curr}
 				if err := database.Restore(&ci); err != nil {
 					log.Println("Failed to restore cf", err)
 				} else {
+					ci.End = ci.Start + int64(ci.Size)
+					curr += int64(ci.Size)
 					cf.Chunks = append(cf.Chunks, ci)
 				}
 			}()

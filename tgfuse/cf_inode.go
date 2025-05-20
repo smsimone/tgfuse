@@ -6,6 +6,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"it.smaso/tgfuse/filesystem"
 	"log"
+	"sort"
 	"sync"
 	"syscall"
 )
@@ -37,37 +38,33 @@ func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-
-	// start := off
-
 	end := off + int64(len(dest))
 	if end > int64(cf.File.OriginalSize) {
 		end = int64(cf.File.OriginalSize)
 	}
 
-	var curr int64 = 0
-
 	wg := sync.WaitGroup{}
+
+	sort.Slice(cf.File.Chunks, func(i, j int) bool {
+		return cf.File.Chunks[i].Idx < cf.File.Chunks[j].Idx
+	})
+
 	for idx := range cf.File.Chunks {
-		ci := cf.File.Chunks[idx]
-
-		if curr+int64(ci.Size) <= end {
-
-		}
-
-		// wg.Add(1)
-		// go func() {
-		// 	defer wg.Done()
-		// 	if err := cf.File.Chunks[idx].FetchBuffer(); err != nil {
-		// 		log.Println("Failed to download chunk item buf", err)
-		// 	}
-		// }()
+		ci := &cf.File.Chunks[idx]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := ci.FetchBuffer(); err != nil {
+				log.Println("Failed to fetch buffer", err)
+			} else {
+				log.Println("Fetched buffer", ci.Idx)
+			}
+		}()
 	}
+	log.Println("Downloaded all chunks of file")
+
 	wg.Wait()
-
 	bytes := cf.File.GetBytes()
-
-	log.Println("Reading", end-off, "bytes")
 
 	return fuse.ReadResultData(bytes[off:end]), 0
 }
