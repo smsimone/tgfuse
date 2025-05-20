@@ -71,6 +71,13 @@ type ChunkItem struct {
 	End   int64
 }
 
+func (c *ChunkItem) PruneFromRam() {
+	if c.FileState == MEMORY {
+		c.Buf.Reset()
+		c.FileState = UPLOADED
+	}
+}
+
 func (c *ChunkItem) GetKeyParams() []database.KeyParam {
 	return []database.KeyParam{
 		{

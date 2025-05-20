@@ -9,11 +9,16 @@ import (
 	"sort"
 	"sync"
 	"syscall"
+	"time"
 )
+
+const TTL = 5 * 60 // seconds
 
 type CfInode struct {
 	fs.Inode
-	File *filesystem.ChunkFile
+	File          *filesystem.ChunkFile
+	lastRead      time.Time
+	currentlyRead bool
 }
 
 // ---------------------
@@ -23,6 +28,21 @@ type CfInode struct {
 var _ = (fs.NodeOpener)((*CfInode)(nil))
 var _ = (fs.NodeReader)((*CfInode)(nil))
 var _ = (fs.NodeGetattrer)((*CfInode)(nil))
+
+func (cf *CfInode) ReadyForCleanup() bool {
+	if cf.currentlyRead {
+		return false
+	}
+	delay := time.Since(cf.lastRead).Seconds()
+	return delay > TTL
+}
+
+func (cf *CfInode) ClearBuffers() {
+	for idx := range cf.File.Chunks {
+		ci := &cf.File.Chunks[idx]
+		ci.PruneFromRam()
+	}
+}
 
 func (cf *CfInode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	out.Size = uint64(cf.File.OriginalSize)
@@ -38,9 +58,15 @@ func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	cf.lastRead = time.Now()
+	cf.currentlyRead = true
+
 	end := off + int64(len(dest))
 	if end > int64(cf.File.OriginalSize) {
 		end = int64(cf.File.OriginalSize)
+		defer func() {
+			cf.currentlyRead = false
+		}()
 	}
 
 	wg := sync.WaitGroup{}
@@ -56,12 +82,9 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 			defer wg.Done()
 			if err := ci.FetchBuffer(); err != nil {
 				log.Println("Failed to fetch buffer", err)
-			} else {
-				log.Println("Fetched buffer", ci.Idx)
 			}
 		}()
 	}
-	log.Println("Downloaded all chunks of file")
 
 	wg.Wait()
 	bytes := cf.File.GetBytes()
@@ -70,11 +93,8 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 }
 
 func (cf *CfInode) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	// disallow writes
 	if fuseFlags&(syscall.O_RDWR|syscall.O_WRONLY) != 0 {
 		return nil, 0, syscall.EROFS
 	}
-
-	// Return FOPEN_DIRECT_IO so content is not cached.
 	return fh, fuse.FOPEN_DIRECT_IO, 0
 }

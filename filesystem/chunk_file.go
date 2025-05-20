@@ -132,7 +132,7 @@ func (cf *ChunkFile) WriteFile(outFile string) error {
 
 	for _, chunk := range cf.Chunks {
 		if chunk.Buf == nil {
-			return fmt.Errorf("Buffer was nil for chunk %d", chunk.Idx)
+			return fmt.Errorf("buffer was nil for chunk %d", chunk.Idx)
 		}
 		file.Write(chunk.Buf.Bytes())
 	}
