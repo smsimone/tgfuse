@@ -73,8 +73,9 @@ type ChunkItem struct {
 
 func (c *ChunkItem) PruneFromRam() {
 	if c.FileState == MEMORY {
-		c.Buf.Reset()
+		c.Buf = nil
 		c.FileState = UPLOADED
+		c.Buf = &bytes.Buffer{}
 	}
 }
 

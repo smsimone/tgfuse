@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const TTL = 5 * 60 // seconds
+const TTL = 10 // 5 * 60 // seconds
 
 type CfInode struct {
 	fs.Inode
@@ -58,6 +58,7 @@ func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	log.Println("Reading", cf.File.OriginalFilename, "offset", off, "end", len(dest))
 	cf.lastRead = time.Now()
 	cf.currentlyRead = true
 
@@ -93,6 +94,7 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 }
 
 func (cf *CfInode) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
+	log.Println("Opening file with flags", openFlags)
 	if fuseFlags&(syscall.O_RDWR|syscall.O_WRONLY) != 0 {
 		return nil, 0, syscall.EROFS
 	}

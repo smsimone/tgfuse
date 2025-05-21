@@ -3,6 +3,7 @@ package main
 import (
 	"it.smaso/tgfuse/tgfuse"
 	"log"
+	"runtime"
 	"time"
 )
 
@@ -17,6 +18,7 @@ func StartGarbageCollector(rootNode *tgfuse.RootNode) {
 				}
 			}
 		}
+		runtime.GC()
 		time.Sleep(2 * time.Second)
 	}
 }
