@@ -9,6 +9,7 @@ import (
 	"it.smaso/tgfuse/tgfuse"
 	"log"
 	"os"
+	"os/signal"
 	"syscall"
 )
 
@@ -24,28 +25,45 @@ func main() {
 	}
 
 	go StartMemoryChecker()
-	// go StartGarbageCollector(root)
+	go StartGarbageCollector(root)
 
 	server, err := fs.Mount(args[1], root, &fs.Options{
 		MountOptions: fuse.MountOptions{
-			AllowOther: true,
+			FsName: "tgfuse",
 		},
+		UID: uint32(os.Getuid()),
+		GID: uint32(os.Getgid()),
 	})
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		switch sig := <-signals; sig {
+		case syscall.SIGINT, syscall.SIGTERM:
+			_ = server.Unmount()
+			log.Println("Unmounted tgfuse folder")
+			os.Exit(0)
+		}
+	}()
 
 	go func() {
 		files, _ := filesystem.FetchFromEtcd()
 		for idx := range *files {
 			ctx := context.Background()
-			file := tgfuse.CfInode{
-				File: &(*files)[idx],
-			}
-			ch := root.NewPersistentInode(
+			file := tgfuse.CfInode{File: &(*files)[idx]}
+
+			ch := root.NewInode(
 				ctx,
 				&file,
-				fs.StableAttr{Mode: syscall.S_IFREG},
+				fs.StableAttr{Mode: syscall.S_IFREG | 0755},
 			)
-			root.AddChild((*files)[idx].OriginalFilename, ch, true)
-			root.Nodes[(*files)[idx].OriginalFilename] = &file
+			filename := (*files)[idx].OriginalFilename
+			root.AddChild(filename, ch, true)
+
+			// root.Nodes[(*files)[idx].OriginalFilename] = &file
+			root.Nodes[filename] = &file
+			// root.CfChildren[filename] = &file
 		}
 		log.Println("Added all the entries to root")
 	}()

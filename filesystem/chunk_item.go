@@ -2,9 +2,33 @@ package filesystem
 
 import (
 	"bytes"
+	"fmt"
+	"it.smaso/tgfuse/database"
+	"strconv"
 
 	"it.smaso/tgfuse/telegram"
 )
+
+type Status = string
+
+const (
+	UPLOADED Status = "uploaded"
+	MEMORY   Status = "memory"
+)
+
+// ChunkItem is the single chunk that has been uploaded
+type ChunkItem struct {
+	Idx         int
+	Size        int
+	Name        string
+	Buf         *bytes.Buffer
+	FileId      *string
+	FileState   Status
+	chunkFileId string
+
+	Start int64
+	End   int64
+}
 
 func (ci *ChunkItem) GetBuffer() *bytes.Buffer {
 	return ci.Buf
@@ -36,4 +60,44 @@ func (ci *ChunkItem) FetchBuffer() error {
 	ci.Buf = bytes.NewBuffer(*bts)
 	ci.FileState = MEMORY
 	return nil
+}
+
+func (ci *ChunkItem) PruneFromRam() {
+	if ci.FileState == MEMORY {
+		ci.Buf = nil
+		ci.FileState = UPLOADED
+		ci.Buf = &bytes.Buffer{}
+	}
+}
+
+func (ci *ChunkItem) GetKeyParams() []database.KeyParam {
+	return []database.KeyParam{
+		{
+			Key: fmt.Sprintf("/ci/%s/%d/size", ci.chunkFileId, ci.Idx),
+			GetValue: func() string {
+				return strconv.Itoa(ci.Size)
+			},
+			SetValue: func(s string) {
+				ci.Size, _ = strconv.Atoi(s)
+			},
+		},
+		{
+			Key: fmt.Sprintf("/ci/%s/%d/name", ci.chunkFileId, ci.Idx),
+			GetValue: func() string {
+				return ci.Name
+			},
+			SetValue: func(s string) {
+				ci.Name = s
+			},
+		},
+		{
+			Key: fmt.Sprintf("/ci/%s/%d/file_id", ci.chunkFileId, ci.Idx),
+			GetValue: func() string {
+				return *ci.FileId
+			},
+			SetValue: func(s string) {
+				ci.FileId = &s
+			},
+		},
+	}
 }

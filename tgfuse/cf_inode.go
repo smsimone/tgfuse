@@ -127,8 +127,6 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 }
 
 func (cf *CfInode) Open(ctx context.Context, openFlags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	log.Println(">> Open(): flags", openFlags)
-
 	if openFlags&(syscall.O_WRONLY|syscall.O_RDWR) != 0 {
 		log.Println("Returning EROFS")
 		return nil, 0, syscall.EROFS

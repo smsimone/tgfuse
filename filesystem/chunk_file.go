@@ -11,8 +11,20 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"sync"
 )
+
+// ChunkFile represents the aggregation of all the chunks
+type ChunkFile struct {
+	Ino              uint64
+	Id               string
+	OriginalFilename string
+	OriginalSize     int
+	NumChunks        int
+	Chunks           []ChunkItem
+	fullByte         *[]byte
+}
 
 func ReadChunkfile(filepath string) (*ChunkFile, error) {
 	file, err := os.Open(filepath)
@@ -143,4 +155,38 @@ func (cf *ChunkFile) WriteFile(outFile string) error {
 
 	fmt.Println("Wrote file", outFile)
 	return nil
+}
+
+func (cf *ChunkFile) GetKeyParams() []database.KeyParam {
+	return []database.KeyParam{
+		{
+			Key: fmt.Sprintf("/cf/%s/filename", cf.Id),
+			GetValue: func() string {
+				return cf.OriginalFilename
+			},
+			SetValue: func(s string) {
+				cf.OriginalFilename = s
+			},
+		},
+		{
+			Key: fmt.Sprintf("/cf/%s/size", cf.Id),
+			GetValue: func() string {
+				return fmt.Sprintf("%d", cf.OriginalSize)
+			},
+			SetValue: func(s string) {
+				val, _ := strconv.Atoi(s)
+				cf.OriginalSize = val
+			},
+		},
+		{
+			Key: fmt.Sprintf("/cf/%s/num_chunks", cf.Id),
+			GetValue: func() string {
+				return fmt.Sprintf("%d", cf.NumChunks)
+			},
+			SetValue: func(s string) {
+				val, _ := strconv.Atoi(s)
+				cf.NumChunks = val
+			},
+		},
+	}
 }
