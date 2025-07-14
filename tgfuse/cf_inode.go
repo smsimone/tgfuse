@@ -2,14 +2,15 @@ package tgfuse
 
 import (
 	"context"
-	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
-	"it.smaso/tgfuse/filesystem"
 	"log"
 	"sort"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
+	"it.smaso/tgfuse/filesystem"
 )
 
 const TTL = 10 // 5 * 60 // seconds
@@ -25,9 +26,11 @@ type CfInode struct {
 // filesystem implementation
 // ---------------------
 
-var _ = (fs.NodeOpener)((*CfInode)(nil))
-var _ = (fs.NodeReader)((*CfInode)(nil))
-var _ = (fs.NodeGetattrer)((*CfInode)(nil))
+var (
+	_ = (fs.NodeOpener)((*CfInode)(nil))
+	_ = (fs.NodeReader)((*CfInode)(nil))
+	_ = (fs.NodeGetattrer)((*CfInode)(nil))
+)
 
 func (cf *CfInode) ReadyForCleanup() bool {
 	if cf.currentlyRead {
@@ -46,18 +49,23 @@ func (cf *CfInode) ClearBuffers() {
 
 func (cf *CfInode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	out.Size = uint64(cf.File.OriginalSize)
-	out.Mode = 0755
+	out.Mode = 0o755
 	return 0
 }
 
 func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	log.Println("Looking up File", name)
-	out.Mode = 0755
+	out.Mode = 0o755
 	out.Size = uint64(cf.File.OriginalSize)
 	return cf.NewInode(ctx, cf, fs.StableAttr{Mode: syscall.S_IFREG}), 0
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	var isFileCmd bool = false
+	if fuseCtx, ok := fuse.FromContext(ctx); ok {
+		pid := fuseCtx.Pid
+	}
+
 	log.Println("Reading", cf.File.OriginalFilename, "offset", off, "end", len(dest))
 	cf.lastRead = time.Now()
 	cf.currentlyRead = true
