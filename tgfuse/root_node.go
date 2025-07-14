@@ -27,3 +27,19 @@ func (rn *RootNode) Create(ctx context.Context, name string, flags uint32, mode 
 	)
 	return n, nil, 0, syscall.F_OK
 }
+
+func (rn *RootNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	log.Println("Looking up File", name)
+
+	node, ok := rn.Nodes[name]
+	if !ok {
+		log.Println("Requested non existent file", name)
+		return nil, syscall.ENOENT
+	}
+
+	out.Mode = 0o444
+	out.Size = uint64(node.File.OriginalSize)
+
+	stable := fs.StableAttr{Mode: syscall.S_IFREG}
+	return rn.NewInode(ctx, node, stable), 0
+}

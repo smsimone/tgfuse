@@ -72,41 +72,41 @@ type ChunkItem struct {
 	End   int64
 }
 
-func (c *ChunkItem) PruneFromRam() {
-	if c.FileState == MEMORY {
-		c.Buf = nil
-		c.FileState = UPLOADED
-		c.Buf = &bytes.Buffer{}
+func (ci *ChunkItem) PruneFromRam() {
+	if ci.FileState == MEMORY {
+		ci.Buf = nil
+		ci.FileState = UPLOADED
+		ci.Buf = &bytes.Buffer{}
 	}
 }
 
-func (c *ChunkItem) GetKeyParams() []database.KeyParam {
+func (ci *ChunkItem) GetKeyParams() []database.KeyParam {
 	return []database.KeyParam{
 		{
-			Key: fmt.Sprintf("/ci/%s/%d/size", c.chunkFileId, c.Idx),
+			Key: fmt.Sprintf("/ci/%s/%d/size", ci.chunkFileId, ci.Idx),
 			GetValue: func() string {
-				return strconv.Itoa(c.Size)
+				return strconv.Itoa(ci.Size)
 			},
 			SetValue: func(s string) {
-				c.Size, _ = strconv.Atoi(s)
+				ci.Size, _ = strconv.Atoi(s)
 			},
 		},
 		{
-			Key: fmt.Sprintf("/ci/%s/%d/name", c.chunkFileId, c.Idx),
+			Key: fmt.Sprintf("/ci/%s/%d/name", ci.chunkFileId, ci.Idx),
 			GetValue: func() string {
-				return c.Name
+				return ci.Name
 			},
 			SetValue: func(s string) {
-				c.Name = s
+				ci.Name = s
 			},
 		},
 		{
-			Key: fmt.Sprintf("/ci/%s/%d/file_id", c.chunkFileId, c.Idx),
+			Key: fmt.Sprintf("/ci/%s/%d/file_id", ci.chunkFileId, ci.Idx),
 			GetValue: func() string {
-				return *c.FileId
+				return *ci.FileId
 			},
 			SetValue: func(s string) {
-				c.FileId = &s
+				ci.FileId = &s
 			},
 		},
 	}

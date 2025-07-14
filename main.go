@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
 	"it.smaso/tgfuse/filesystem"
 	"it.smaso/tgfuse/tgfuse"
 	"log"
@@ -23,9 +24,13 @@ func main() {
 	}
 
 	go StartMemoryChecker()
-	go StartGarbageCollector(root)
+	// go StartGarbageCollector(root)
 
-	server, err := fs.Mount(args[1], root, &fs.Options{})
+	server, err := fs.Mount(args[1], root, &fs.Options{
+		MountOptions: fuse.MountOptions{
+			AllowOther: true,
+		},
+	})
 
 	go func() {
 		files, _ := filesystem.FetchFromEtcd()

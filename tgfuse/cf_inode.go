@@ -3,6 +3,7 @@ package tgfuse
 import (
 	"context"
 	"log"
+	"os"
 	"sort"
 	"sync"
 	"syscall"
@@ -13,13 +14,19 @@ import (
 	"it.smaso/tgfuse/filesystem"
 )
 
-const TTL = 10 // 5 * 60 // seconds
+const TTL = 5 * 60 // seconds
 
 type CfInode struct {
 	fs.Inode
 	File          *filesystem.ChunkFile
 	lastRead      time.Time
 	currentlyRead bool
+	writeTmpFile  sync.Once
+}
+
+type CfHandle struct {
+	fs.FileHandle
+	inode *CfInode
 }
 
 // ---------------------
@@ -30,6 +37,12 @@ var (
 	_ = (fs.NodeOpener)((*CfInode)(nil))
 	_ = (fs.NodeReader)((*CfInode)(nil))
 	_ = (fs.NodeGetattrer)((*CfInode)(nil))
+)
+
+var (
+	_ = (fs.FileHandle)((*CfHandle)(nil))
+	_ = (fs.FileHandle)((*CfHandle)(nil))
+	_ = (fs.FileReader)((*CfHandle)(nil))
 )
 
 func (cf *CfInode) ReadyForCleanup() bool {
@@ -49,28 +62,33 @@ func (cf *CfInode) ClearBuffers() {
 
 func (cf *CfInode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	out.Size = uint64(cf.File.OriginalSize)
-	out.Mode = 0o755
+	out.Mode = 0o444
 	return 0
+}
+
+func (h *CfHandle) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	log.Printf(">> CfHandle.Read(): off=%d len=%d", off, len(dest))
+	return h.inode.Read(ctx, h, dest, off)
 }
 
 func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	log.Println("Looking up File", name)
 	out.Mode = 0o755
 	out.Size = uint64(cf.File.OriginalSize)
-	return cf.NewInode(ctx, cf, fs.StableAttr{Mode: syscall.S_IFREG}), 0
+	return &cf.Inode, 0
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	cf.lastRead = time.Now()
 	cf.currentlyRead = true
+	defer func() {
+		cf.currentlyRead = false
+	}()
 
 	end := off + int64(len(dest))
-	log.Println("Reading", cf.File.OriginalFilename, "offset", off, "end", end)
+
 	if end > int64(cf.File.OriginalSize) {
 		end = int64(cf.File.OriginalSize)
-		defer func() {
-			cf.currentlyRead = false
-		}()
 	}
 
 	wg := sync.WaitGroup{}
@@ -82,24 +100,39 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 	for idx := range cf.File.Chunks {
 		ci := &cf.File.Chunks[idx]
 		wg.Add(1)
-		go func() {
+		go func(item *filesystem.ChunkItem) {
 			defer wg.Done()
-			if err := ci.FetchBuffer(); err != nil {
+			if err := item.FetchBuffer(); err != nil {
 				log.Println("Failed to fetch buffer", err)
 			}
-		}()
+		}(ci)
 	}
 
 	wg.Wait()
-	bytes := cf.File.GetBytes()
 
-	return fuse.ReadResultData(bytes[off:end]), 0
+	cf.writeTmpFile.Do(func() {
+		file, _ := os.Create("random_file.pdf")
+		defer func() {
+			_ = file.Close()
+		}()
+		_, err := file.Write(cf.File.GetBytes(0, int64(cf.File.OriginalSize)-1))
+		if err != nil {
+			log.Println("Failed to write tmp file", err)
+		}
+	})
+
+	bytes := cf.File.GetBytes(off, end)
+
+	return fuse.ReadResultData(bytes), 0
 }
 
-func (cf *CfInode) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	log.Println("Opening file with flags", openFlags)
-	if fuseFlags&(syscall.O_RDWR|syscall.O_WRONLY) != 0 {
+func (cf *CfInode) Open(ctx context.Context, openFlags uint32) (fs.FileHandle, uint32, syscall.Errno) {
+	log.Println(">> Open(): flags", openFlags)
+
+	if openFlags&(syscall.O_WRONLY|syscall.O_RDWR) != 0 {
+		log.Println("Returning EROFS")
 		return nil, 0, syscall.EROFS
 	}
-	return fh, fuse.FOPEN_DIRECT_IO, 0
+
+	return &CfHandle{inode: cf}, 0, 0
 }

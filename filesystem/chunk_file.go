@@ -114,16 +114,16 @@ func (cf *ChunkFile) UploadToDatabase() error {
 	return nil
 }
 
-func (cf *ChunkFile) GetBytes() []byte {
+func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 	var b []byte
 	if cf.fullByte != nil {
-		return *cf.fullByte
+		return (*cf.fullByte)[start:end]
 	}
 	for _, chunk := range cf.Chunks {
 		b = append(b, chunk.Buf.Bytes()...)
 	}
 	cf.fullByte = &b
-	return b
+	return b[start:end]
 }
 
 func (cf *ChunkFile) WriteFile(outFile string) error {
