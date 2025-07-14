@@ -3,7 +3,6 @@ package tgfuse
 import (
 	"context"
 	"log"
-	"os"
 	"sort"
 	"sync"
 	"syscall"
@@ -95,30 +94,25 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 		return cf.File.Chunks[i].Idx < cf.File.Chunks[j].Idx
 	})
 
-	// wg := sync.WaitGroup{}
+	concurrent := make(chan int, 5)
+	wg := sync.WaitGroup{}
 	for idx := range cf.File.Chunks {
 		ci := &cf.File.Chunks[idx]
-		// wg.Add(1)
-		// go func(item *filesystem.ChunkItem) {
-		// 	defer wg.Done()
-		if err := ci.FetchBuffer(); err != nil {
-			log.Println("Failed to fetch buffer", err)
-		}
-		// }(ci)
+		wg.Add(1)
+		go func(item *filesystem.ChunkItem) {
+			defer wg.Done()
+			concurrent <- 1
+			defer func() {
+				<-concurrent
+			}()
+			log.Println("Started downloading", ci.Idx)
+			if err := ci.FetchBuffer(); err != nil {
+				log.Println("Failed to fetch buffer", err)
+			}
+		}(ci)
 	}
 
-	// wg.Wait()
-
-	cf.writeTmpFile.Do(func() {
-		file, _ := os.Create("random_file.pdf")
-		defer func() {
-			_ = file.Close()
-		}()
-		_, err := file.Write(cf.File.GetBytes(0, int64(cf.File.OriginalSize)-1))
-		if err != nil {
-			log.Println("Failed to write tmp file", err)
-		}
-	})
+	wg.Wait()
 
 	bytes := cf.File.GetBytes(off, end)
 	return fuse.ReadResultData(bytes), 0

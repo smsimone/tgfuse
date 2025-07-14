@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"it.smaso/tgfuse/database"
-	"strconv"
-
 	"it.smaso/tgfuse/telegram"
+	"strconv"
 )
 
 type Status = string
