@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"io"
@@ -23,7 +24,6 @@ type ChunkFile struct {
 	OriginalSize     int
 	NumChunks        int
 	Chunks           []ChunkItem
-	fullByte         *[]byte
 }
 
 func ReadChunkfile(filepath string) (*ChunkFile, error) {
@@ -79,22 +79,26 @@ func FetchFromEtcd() (*[]ChunkFile, error) {
 	}
 
 	var chunkFiles []ChunkFile
+	wg := sync.WaitGroup{}
+	var mutex sync.Mutex
+
+	errs := make([]error, 0)
 	for _, cfId := range *cfIds {
-		cf := ChunkFile{Id: cfId, Chunks: []ChunkItem{}}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cf := ChunkFile{Id: cfId, Chunks: []ChunkItem{}}
 
-		if err := database.Restore(&cf); err != nil {
-			fmt.Println("Failed to restore cf", err)
-			return nil, err
-		}
+			if err := database.Restore(&cf); err != nil {
+				fmt.Println("Failed to restore cf", err)
+				mutex.Lock()
+				errs = append(errs, fmt.Errorf("failed to restore cf: %v", err))
+				mutex.Unlock()
+				return
+			}
 
-		wg := sync.WaitGroup{}
-
-		var curr int64 = 0
-		for ciIdx := range cf.NumChunks {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+			var curr int64 = 0
+			for ciIdx := range cf.NumChunks {
 				ci := ChunkItem{Idx: ciIdx, chunkFileId: cfId, Start: curr}
 				if err := database.Restore(&ci); err != nil {
 					log.Println("Failed to restore cf", err)
@@ -103,12 +107,18 @@ func FetchFromEtcd() (*[]ChunkFile, error) {
 					curr += int64(ci.Size)
 					cf.Chunks = append(cf.Chunks, ci)
 				}
-			}()
-		}
+			}
 
-		wg.Wait()
+			mutex.Lock()
+			chunkFiles = append(chunkFiles, cf)
+			mutex.Unlock()
+		}()
 
-		chunkFiles = append(chunkFiles, cf)
+	}
+	wg.Wait()
+
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
 	}
 
 	return &chunkFiles, nil
@@ -136,28 +146,35 @@ func (cf *ChunkFile) UploadToDatabase() error {
 }
 
 func (cf *ChunkFile) GetBytes(start, end int64) []byte {
-	var b []byte
-	if cf.fullByte != nil {
-		b = *cf.fullByte
-		// if len(b) != cf.OriginalSize {
-		// 	log.Panicf("Invalid byte size: got %d, expected %d", len(b), cf.OriginalSize)
-		// }
-		return b[start:end]
-	}
+	var result []byte
 	for idx := range cf.Chunks {
 		chunk := &cf.Chunks[idx]
+
+		// Skip chunks that do not intersect the requested range
+		if end <= chunk.Start || start >= chunk.End {
+			// log.Printf("Skipped chunk [%d]: no overlap with [%d:%d]\n", chunk.Idx, start, end)
+			continue
+		}
+
+		// Compute relative positions within this chunk
+		relativeStart := max(0, start-chunk.Start)
+		relativeEnd := min(chunk.End-chunk.Start, end-chunk.Start)
+
 		chunk.lock.Lock()
-		log.Printf("Copying bytes from chunk %d\n", idx)
-		b = append(b, chunk.Buf.Bytes()...)
-		log.Printf("Copied bytes from chunk %d\n", idx)
+		buf := chunk.Buf.Bytes()
+
+		if relativeStart >= int64(len(buf)) || relativeEnd > int64(len(buf)) {
+			log.Printf("Invalid range [%d:%d] for chunk %d (buffer size %d)\n", relativeStart, relativeEnd, chunk.Idx, len(buf))
+			chunk.lock.Unlock()
+			continue
+		}
+
+		log.Printf("Copying bytes from chunk %d [%d:%d]\n", idx, relativeStart, relativeEnd)
+		result = append(result, buf[relativeStart:relativeEnd]...)
 		chunk.lock.Unlock()
 	}
-	cf.fullByte = &b
 
-	// if len(b) != cf.OriginalSize {
-	// 	log.Panicf("Invalid byte size: got %d, expected %d", len(b), cf.OriginalSize)
-	// }
-	return b[start:end]
+	return result
 }
 
 func (cf *ChunkFile) WriteFile(outFile string) error {
