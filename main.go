@@ -20,12 +20,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	root := &tgfuse.RootNode{
-		Nodes: map[string]*tgfuse.CfInode{},
-	}
+	root := tgfuse.NewRoot()
 
-	go StartMemoryChecker()
-	go StartGarbageCollector(root)
+	// go StartMemoryChecker()
+	// go StartGarbageCollector(root)
 
 	server, err := fs.Mount(args[1], root, &fs.Options{
 		MountOptions: fuse.MountOptions{

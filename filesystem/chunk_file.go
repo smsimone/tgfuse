@@ -38,15 +38,23 @@ func ReadChunkfile(filepath string) (*ChunkFile, error) {
 		return nil, err
 	}
 
+	return SplitBytes(path.Base(filepath), &fileBytes)
+}
+
+func SplitBytes(filename string, fileBytes *[]byte) (*ChunkFile, error) {
+	if fileBytes == nil {
+		panic("fileBytes must not be nil")
+	}
+
 	cf := ChunkFile{
-		OriginalFilename: path.Base(filepath),
-		OriginalSize:     len(fileBytes),
+		OriginalFilename: filename,
+		OriginalSize:     len(*fileBytes),
 		Id:               uuid.NewString(),
 	}
 
 	var ci []ChunkItem
 	var count int = 0
-	for chunk := range slices.Chunk(fileBytes, configs.CHUNK_SIZE) {
+	for chunk := range slices.Chunk(*fileBytes, configs.CHUNK_SIZE) {
 		ci = append(ci, ChunkItem{
 			Idx:         count,
 			Size:        len(chunk),

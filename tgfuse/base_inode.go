@@ -4,23 +4,27 @@ import (
 	"context"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"it.smaso/tgfuse/filesystem"
 	"log"
 	"syscall"
 )
 
-type baseInode struct {
+type virtualInode struct {
 	fs.Inode
 	data []byte
 	name string
 	mode uint32
 }
 
-var _ = (fs.NodeWriter)((*baseInode)(nil))
-var _ = (fs.NodeGetattrer)((*baseInode)(nil))
-var _ = (fs.NodeReader)((*baseInode)(nil))
-var _ = (fs.NodeOpener)((*baseInode)(nil))
+var (
+	_ = (fs.NodeWriter)((*virtualInode)(nil))
+	_ = (fs.NodeGetattrer)((*virtualInode)(nil))
+	_ = (fs.NodeReader)((*virtualInode)(nil))
+	_ = (fs.NodeOpener)((*virtualInode)(nil))
+	_ = (fs.NodeFlusher)((*virtualInode)(nil))
+)
 
-func (bi *baseInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+func (bi *virtualInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	if off >= int64(len(bi.data)) {
 		return fuse.ReadResultData(nil), 0
 	}
@@ -31,7 +35,7 @@ func (bi *baseInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, of
 	return fuse.ReadResultData(bi.data[off:end]), 0
 }
 
-func (bi *baseInode) Write(ctx context.Context, f fs.FileHandle, data []byte, off int64) (uint32, syscall.Errno) {
+func (bi *virtualInode) Write(ctx context.Context, f fs.FileHandle, data []byte, off int64) (uint32, syscall.Errno) {
 	newLen := int(off) + len(data)
 	if newLen > cap(bi.data) {
 		newBuf := make([]byte, newLen)
@@ -45,17 +49,41 @@ func (bi *baseInode) Write(ctx context.Context, f fs.FileHandle, data []byte, of
 	return uint32(len(data)), 0
 }
 
-func (bi *baseInode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
+func (bi *virtualInode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	out.Size = uint64(len(bi.data))
 	out.Mode = bi.mode
 	return 0
 }
 
-func (bi *baseInode) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
+func (bi *virtualInode) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	log.Println("Opening data from", bi.name)
 	if fuseFlags&(syscall.O_RDWR|syscall.O_WRONLY) != 0 {
 		return nil, 0, syscall.EROFS
 	}
 
 	return bi, fuse.FOPEN_DIRECT_IO, 0
+}
+
+func (bi *virtualInode) Flush(ctx context.Context, f fs.FileHandle) syscall.Errno {
+	log.Println("Flushing data from", bi.name)
+
+	cf, err := filesystem.SplitBytes(bi.name, &bi.data)
+	if err != nil {
+		log.Println("Failed to split file into chunkfile", err)
+		return syscall.EIO
+	}
+
+	for idx := range cf.Chunks {
+		chunk := &cf.Chunks[idx]
+		if err := chunk.Send(); err != nil {
+			log.Println("Failed to send chunk", err)
+		}
+	}
+
+	if err := cf.UploadToDatabase(); err != nil {
+		log.Println("Failed to upload to database", err)
+		return syscall.EIO
+	}
+
+	return 0
 }
