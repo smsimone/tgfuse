@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/hanwen/go-fuse/v2/fs"
-	"it.smaso/tgfuse/filesystem"
-	"it.smaso/tgfuse/tgfuse"
 	"log"
 	"os"
 	"syscall"
+
+	"github.com/hanwen/go-fuse/v2/fs"
+	"it.smaso/tgfuse/filesystem"
+	"it.smaso/tgfuse/tgfuse"
 )
 
 func main() {

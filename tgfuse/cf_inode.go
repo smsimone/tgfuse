@@ -3,8 +3,6 @@ package tgfuse
 import (
 	"context"
 	"log"
-	"sort"
-	"sync"
 	"syscall"
 	"time"
 
@@ -15,6 +13,7 @@ import (
 
 const TTL = 10 // 5 * 60 // seconds
 
+// CfInode represents the inode on the machine and
 type CfInode struct {
 	fs.Inode
 	File          *filesystem.ChunkFile
@@ -61,16 +60,13 @@ func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	var isFileCmd bool = false
-	if fuseCtx, ok := fuse.FromContext(ctx); ok {
-		pid := fuseCtx.Pid
-	}
+	// TODO: if reading using "file" command, return only the metadata
 
-	log.Println("Reading", cf.File.OriginalFilename, "offset", off, "end", len(dest))
+	end := off + int64(len(dest))
+	log.Println("Reading", cf.File.OriginalFilename, "offset", off, "end", end)
 	cf.lastRead = time.Now()
 	cf.currentlyRead = true
 
-	end := off + int64(len(dest))
 	if end > int64(cf.File.OriginalSize) {
 		end = int64(cf.File.OriginalSize)
 		defer func() {
@@ -78,27 +74,13 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 		}()
 	}
 
-	wg := sync.WaitGroup{}
-
-	sort.Slice(cf.File.Chunks, func(i, j int) bool {
-		return cf.File.Chunks[i].Idx < cf.File.Chunks[j].Idx
-	})
-
-	for idx := range cf.File.Chunks {
-		ci := &cf.File.Chunks[idx]
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := ci.FetchBuffer(); err != nil {
-				log.Println("Failed to fetch buffer", err)
-			}
-		}()
+	bytes, err := cf.File.FetchBytes(off, end)
+	if err != nil {
+		log.Println("Error reading file", err)
+		return nil, syscall.EIO
 	}
 
-	wg.Wait()
-	bytes := cf.File.GetBytes()
-
-	return fuse.ReadResultData(bytes[off:end]), 0
+	return fuse.ReadResultData(bytes), 0
 }
 
 func (cf *CfInode) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
