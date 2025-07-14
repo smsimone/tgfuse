@@ -116,9 +116,13 @@ func (cf *ChunkFile) UploadToDatabase() error {
 
 func (cf *ChunkFile) GetBytes() []byte {
 	var b []byte
+	if cf.fullByte != nil {
+		return *cf.fullByte
+	}
 	for _, chunk := range cf.Chunks {
 		b = append(b, chunk.Buf.Bytes()...)
 	}
+	cf.fullByte = &b
 	return b
 }
 

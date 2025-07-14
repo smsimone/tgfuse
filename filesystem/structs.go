@@ -22,37 +22,38 @@ type ChunkFile struct {
 	OriginalSize     int
 	NumChunks        int
 	Chunks           []ChunkItem
+	fullByte         *[]byte
 }
 
-func (c *ChunkFile) GetKeyParams() []database.KeyParam {
+func (cf *ChunkFile) GetKeyParams() []database.KeyParam {
 	return []database.KeyParam{
 		{
-			Key: fmt.Sprintf("/cf/%s/filename", c.Id),
+			Key: fmt.Sprintf("/cf/%s/filename", cf.Id),
 			GetValue: func() string {
-				return c.OriginalFilename
+				return cf.OriginalFilename
 			},
 			SetValue: func(s string) {
-				c.OriginalFilename = s
+				cf.OriginalFilename = s
 			},
 		},
 		{
-			Key: fmt.Sprintf("/cf/%s/size", c.Id),
+			Key: fmt.Sprintf("/cf/%s/size", cf.Id),
 			GetValue: func() string {
-				return fmt.Sprintf("%d", c.OriginalSize)
+				return fmt.Sprintf("%d", cf.OriginalSize)
 			},
 			SetValue: func(s string) {
 				val, _ := strconv.Atoi(s)
-				c.OriginalSize = val
+				cf.OriginalSize = val
 			},
 		},
 		{
-			Key: fmt.Sprintf("/cf/%s/num_chunks", c.Id),
+			Key: fmt.Sprintf("/cf/%s/num_chunks", cf.Id),
 			GetValue: func() string {
-				return fmt.Sprintf("%d", c.NumChunks)
+				return fmt.Sprintf("%d", cf.NumChunks)
 			},
 			SetValue: func(s string) {
 				val, _ := strconv.Atoi(s)
-				c.NumChunks = val
+				cf.NumChunks = val
 			},
 		},
 	}

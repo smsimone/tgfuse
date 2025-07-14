@@ -12,7 +12,7 @@ func StartMemoryChecker() {
 	log.Println("Starting memory checker")
 	file, err := os.OpenFile("/Users/antlia/Development/tgfuse_go/stats.csv", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 	if err != nil {
-		panic(err)
+		file, _ = os.Create("/Users/antlia/Development/tgfuse_go/stats.csv")
 	}
 	_, _ = file.WriteString("time,heap alloc,heap sys,heap in use\n")
 	_ = file.Close()

@@ -61,16 +61,11 @@ func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	var isFileCmd bool = false
-	if fuseCtx, ok := fuse.FromContext(ctx); ok {
-		pid := fuseCtx.Pid
-	}
-
-	log.Println("Reading", cf.File.OriginalFilename, "offset", off, "end", len(dest))
 	cf.lastRead = time.Now()
 	cf.currentlyRead = true
 
 	end := off + int64(len(dest))
+	log.Println("Reading", cf.File.OriginalFilename, "offset", off, "end", end)
 	if end > int64(cf.File.OriginalSize) {
 		end = int64(cf.File.OriginalSize)
 		defer func() {
