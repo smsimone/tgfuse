@@ -72,24 +72,20 @@ func (rn *RootNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut)
 		return nil, syscall.ENOENT
 	}
 
+	out.SetEntryTimeout(20 * time.Second)
+	out.SetAttrTimeout(10 * time.Second)
+
 	if cfNode, ok := rn.Nodes[name]; ok {
 		attr := node.StableAttr()
 		out.Attr.Mode = attr.Mode
 		out.Attr.Ino = attr.Ino
 		out.Size = uint64(cfNode.File.OriginalSize)
 
-		// out.Attr.Size = attr.res
-		out.SetEntryTimeout(1 * time.Second)
-		out.SetAttrTimeout(1 * time.Second)
 	} else if bInode, ok := rn.virtualNodes[name]; ok {
 		attr := node.StableAttr()
 		out.Attr.Mode = attr.Mode
 		out.Attr.Ino = attr.Ino
 		out.Size = uint64(len(bInode.data))
-
-		// out.Attr.Size = attr.res
-		out.SetEntryTimeout(1 * time.Second)
-		out.SetAttrTimeout(1 * time.Second)
 	}
 
 	return node, 0

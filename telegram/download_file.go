@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"it.smaso/tgfuse/configs"
@@ -42,6 +43,7 @@ func getFilePath(fileId string) (*string, error) {
 func DownloadFile(fileId string) (*[]byte, error) {
 	filePath, err := getFilePath(fileId)
 	if err != nil {
+		log.Println("Failed to get file path", err)
 		return nil, err
 	}
 
@@ -49,16 +51,17 @@ func DownloadFile(fileId string) (*[]byte, error) {
 
 	req, err := http.NewRequest("GET", url, &bytes.Buffer{})
 	if err != nil {
+		log.Println("Failed to create request", err)
 		return nil, err
 	}
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Println("Failed to send request", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
-
 	return &respBody, nil
 }

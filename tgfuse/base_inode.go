@@ -6,6 +6,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"it.smaso/tgfuse/filesystem"
 	"log"
+	"sync"
 	"syscall"
 )
 
@@ -45,7 +46,7 @@ func (bi *virtualInode) Write(ctx context.Context, f fs.FileHandle, data []byte,
 		bi.data = bi.data[:newLen]
 	}
 	copy(bi.data[off:], data)
-	log.Printf("Wrote %d bytes to %s at offset %d\n", len(data), bi.name, off)
+	// log.Printf("Wrote %d bytes to %s at offset %d\n", len(data), bi.name, off)
 	return uint32(len(data)), 0
 }
 
@@ -73,12 +74,17 @@ func (bi *virtualInode) Flush(ctx context.Context, f fs.FileHandle) syscall.Errn
 		return syscall.EIO
 	}
 
+	wg := sync.WaitGroup{}
 	for idx := range cf.Chunks {
-		chunk := &cf.Chunks[idx]
-		if err := chunk.Send(); err != nil {
-			log.Println("Failed to send chunk", err)
-		}
+		wg.Add(1)
+		go func(chunk *filesystem.ChunkItem) {
+			defer wg.Done()
+			if err := chunk.Send(); err != nil {
+				log.Println("Failed to send chunk", err)
+			}
+		}(&cf.Chunks[idx])
 	}
+	wg.Wait()
 
 	if err := cf.UploadToDatabase(); err != nil {
 		log.Println("Failed to upload to database", err)

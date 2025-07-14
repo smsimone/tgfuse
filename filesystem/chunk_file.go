@@ -64,7 +64,7 @@ func SplitBytes(filename string, fileBytes *[]byte) (*ChunkFile, error) {
 			FileId:      nil,
 			chunkFileId: cf.Id,
 		})
-		count = count + 1
+		count++
 	}
 	cf.Chunks = ci
 	cf.NumChunks = count
@@ -158,7 +158,7 @@ func (cf *ChunkFile) WriteFile(outFile string) error {
 		if chunk.Buf == nil {
 			return fmt.Errorf("buffer was nil for chunk %d", chunk.Idx)
 		}
-		file.Write(chunk.Buf.Bytes())
+		_, _ = file.Write(chunk.Buf.Bytes())
 	}
 
 	fmt.Println("Wrote file", outFile)

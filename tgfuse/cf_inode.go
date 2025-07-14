@@ -91,24 +91,23 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 		end = int64(cf.File.OriginalSize)
 	}
 
-	wg := sync.WaitGroup{}
-
 	sort.Slice(cf.File.Chunks, func(i, j int) bool {
 		return cf.File.Chunks[i].Idx < cf.File.Chunks[j].Idx
 	})
 
+	// wg := sync.WaitGroup{}
 	for idx := range cf.File.Chunks {
 		ci := &cf.File.Chunks[idx]
-		wg.Add(1)
-		go func(item *filesystem.ChunkItem) {
-			defer wg.Done()
-			if err := item.FetchBuffer(); err != nil {
-				log.Println("Failed to fetch buffer", err)
-			}
-		}(ci)
+		// wg.Add(1)
+		// go func(item *filesystem.ChunkItem) {
+		// 	defer wg.Done()
+		if err := ci.FetchBuffer(); err != nil {
+			log.Println("Failed to fetch buffer", err)
+		}
+		// }(ci)
 	}
 
-	wg.Wait()
+	// wg.Wait()
 
 	cf.writeTmpFile.Do(func() {
 		file, _ := os.Create("random_file.pdf")
@@ -122,7 +121,6 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 	})
 
 	bytes := cf.File.GetBytes(off, end)
-
 	return fuse.ReadResultData(bytes), 0
 }
 
