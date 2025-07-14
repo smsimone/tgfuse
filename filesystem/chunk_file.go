@@ -120,12 +120,13 @@ func (cf *ChunkFile) UploadToDatabase() error {
 		return err
 	}
 
-	for _, chunk := range cf.Chunks {
+	for idx := range cf.Chunks {
+		chunk := &cf.Chunks[idx]
 		if chunk.FileId == nil {
 			fmt.Println("Somehow the file id came null")
 			os.Exit(1)
 		}
-		if err := database.SendFile(&chunk); err != nil {
+		if err := database.SendFile(chunk); err != nil {
 			fmt.Printf("Failed to send ChunkItem to database: %s", err.Error())
 			return err
 		}
@@ -137,12 +138,25 @@ func (cf *ChunkFile) UploadToDatabase() error {
 func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 	var b []byte
 	if cf.fullByte != nil {
-		return (*cf.fullByte)[start:end]
+		b = *cf.fullByte
+		// if len(b) != cf.OriginalSize {
+		// 	log.Panicf("Invalid byte size: got %d, expected %d", len(b), cf.OriginalSize)
+		// }
+		return b[start:end]
 	}
-	for _, chunk := range cf.Chunks {
+	for idx := range cf.Chunks {
+		chunk := &cf.Chunks[idx]
+		chunk.lock.Lock()
+		log.Printf("Copying bytes from chunk %d\n", idx)
 		b = append(b, chunk.Buf.Bytes()...)
+		log.Printf("Copied bytes from chunk %d\n", idx)
+		chunk.lock.Unlock()
 	}
 	cf.fullByte = &b
+
+	// if len(b) != cf.OriginalSize {
+	// 	log.Panicf("Invalid byte size: got %d, expected %d", len(b), cf.OriginalSize)
+	// }
 	return b[start:end]
 }
 

@@ -6,6 +6,7 @@ import (
 	"it.smaso/tgfuse/database"
 	"it.smaso/tgfuse/telegram"
 	"strconv"
+	"sync"
 )
 
 type Status = string
@@ -24,6 +25,7 @@ type ChunkItem struct {
 	FileId      *string
 	FileState   Status
 	chunkFileId string
+	lock        sync.Mutex
 
 	Start int64
 	End   int64
@@ -48,11 +50,16 @@ func (ci *ChunkItem) Send() error {
 	return nil
 }
 
+func (ci *ChunkItem) ForceLock() {
+	ci.lock.Lock()
+}
+
 func (ci *ChunkItem) FetchBuffer() error {
+	defer ci.lock.Unlock()
 	if ci.FileState == MEMORY {
 		return nil
 	}
-	bts, err := telegram.DownloadFile(*ci.FileId)
+	bts, err := telegram.GetInstance().DownloadFile(*ci.FileId)
 	if err != nil {
 		return err
 	}

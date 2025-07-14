@@ -5,11 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"it.smaso/tgfuse/configs"
 	"log"
 	"net/http"
-
-	"it.smaso/tgfuse/configs"
 )
+
+var instance *Telegram
+
+type Telegram struct {
+	sem chan int
+}
+
+func GetInstance() *Telegram {
+	if instance == nil {
+		instance = &Telegram{
+			sem: make(chan int, 5),
+		}
+	}
+	return instance
+}
 
 func getFilePath(fileId string) (*string, error) {
 	type response struct {
@@ -40,7 +54,10 @@ func getFilePath(fileId string) (*string, error) {
 	return &jResp.Result.FilePath, nil
 }
 
-func DownloadFile(fileId string) (*[]byte, error) {
+func (tg *Telegram) DownloadFile(fileId string) (*[]byte, error) {
+	tg.sem <- 1
+	defer func() { <-tg.sem }()
+
 	filePath, err := getFilePath(fileId)
 	if err != nil {
 		log.Println("Failed to get file path", err)

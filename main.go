@@ -14,6 +14,7 @@ import (
 )
 
 func main() {
+
 	args := os.Args
 	if len(args) < 2 {
 		fmt.Println("Missing mounting point")
@@ -32,6 +33,12 @@ func main() {
 		UID: uint32(os.Getuid()),
 		GID: uint32(os.Getgid()),
 	})
+
+	defer func() {
+		if err := recover(); err != nil {
+			_ = server.Unmount()
+		}
+	}()
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
