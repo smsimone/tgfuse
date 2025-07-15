@@ -12,6 +12,7 @@ import (
 	"it.smaso/tgfuse/configs"
 	db "it.smaso/tgfuse/database"
 	"it.smaso/tgfuse/logger"
+	"it.smaso/tgfuse/services"
 	"it.smaso/tgfuse/tgfuse"
 )
 
@@ -28,7 +29,8 @@ func main() {
 	logger.LogInfo("Connected to database")
 
 	// go StartMemoryChecker()
-	go StartGarbageCollector(root)
+	go services.StartGarbageCollector(root)
+	go services.UpdateFiles(root)
 
 	server, err := fs.Mount(args[1], root, &fs.Options{
 		MountOptions: fuse.MountOptions{

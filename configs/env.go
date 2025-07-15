@@ -37,6 +37,7 @@ var (
 	LOG_FILE              = "tgfuse.log" // "/var/log/tgfuse/tgfuse.log"
 	GC_DELAY              = 4            // seconds
 	CHUNK_TTL             = 5 * 60       // seconds
+	FILES_UPDATE          = 5            // seconds
 	DB_CONFIG    DBConfig = &EtcdConfig{
 		URL: "89.168.16.172:2379",
 	}

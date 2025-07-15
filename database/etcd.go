@@ -126,7 +126,6 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 func (err SendKeyErr) Error() string { return fmt.Sprintf("%s: %s", err.Key, err.Err.Error()) }
 
 func (e *etcdClient) getClient() (*clientv3.Client, error) {
-	logger.LogInfo(fmt.Sprintf("Connecting etcd to %s", e.configs.GetURL()))
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{e.configs.URL},
 		DialTimeout: 5 * time.Second,

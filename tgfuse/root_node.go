@@ -33,6 +33,14 @@ func NewRoot() *RootNode {
 	}
 }
 
+func (rn *RootNode) GetCurrentNames() []string {
+	names := []string{}
+	for idx := range rn.Nodes {
+		names = append(names, rn.Nodes[idx].File.OriginalFilename)
+	}
+	return names
+}
+
 func (rn *RootNode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	out.Mode = fuse.S_IFDIR | 0o755
 	out.Mtime = uint64(time.Now().UnixMilli())
