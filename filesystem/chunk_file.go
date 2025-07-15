@@ -94,7 +94,7 @@ func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 
 		// Skip chunks that do not intersect the requested range
 		if end <= chunk.Start || start >= chunk.End {
-			logger.LogInfo(fmt.Sprintf("Skipping chunk %d: doesn't intersect with req(%d, %d) <> chunk(%d, %d)", idx, start, end, chunk.Start, chunk.End))
+			// logger.LogInfo(fmt.Sprintf("Skipping chunk %d: doesn't intersect with req(%d, %d) <> chunk(%d, %d)", idx, start, end, chunk.Start, chunk.End))
 			continue
 		}
 
