@@ -28,7 +28,7 @@ func main() {
 	logger.LogInfo("Connected to database")
 
 	// go StartMemoryChecker()
-	// go StartGarbageCollector(root)
+	go StartGarbageCollector(root)
 
 	server, err := fs.Mount(args[1], root, &fs.Options{
 		MountOptions: fuse.MountOptions{
