@@ -10,11 +10,10 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"it.smaso/tgfuse/configs"
 	"it.smaso/tgfuse/filesystem"
 	"it.smaso/tgfuse/logger"
 )
-
-const TTL = 5 * 60 // seconds
 
 type CfInode struct {
 	fs.Inode
@@ -50,7 +49,7 @@ func (cf *CfInode) ReadyForCleanup() bool {
 		return false
 	}
 	delay := time.Since(cf.lastRead).Seconds()
-	return delay > TTL
+	return delay > configs.CHUNK_TTL
 }
 
 func (cf *CfInode) ClearBuffers() {

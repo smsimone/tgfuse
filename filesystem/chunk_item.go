@@ -34,7 +34,7 @@ type ChunkItem struct {
 }
 
 func (ci *ChunkItem) GetBuffer() *bytes.Buffer {
-	 return bytes.NewBuffer(ci.Buf.Bytes())
+	return bytes.NewBuffer(ci.Buf.Bytes())
 }
 
 func (ci *ChunkItem) GetName() string {

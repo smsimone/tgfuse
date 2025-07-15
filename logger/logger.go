@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	"it.smaso/tgfuse/configs"
 )
 
 type Level = string
@@ -20,7 +22,7 @@ type Logger struct {
 
 var (
 	logChan   = make(chan string, 100)
-	closeChan = make(chan interface{})
+	closeChan = make(chan any)
 	instance  *Logger
 )
 
@@ -32,34 +34,34 @@ func New() *Logger {
 	return instance
 }
 
-func Log(level Level, msg string ){
-	New().Log( level ,msg)
+func Log(level Level, msg string) {
+	New().Log(level, msg)
 }
 
-func LogInfo(msg string){
+func LogInfo(msg string) {
 	New().Log(Info, msg)
 }
 
-func LogWarn(msg string){
-	New().Log(Warn,msg)
+func LogWarn(msg string) {
+	New().Log(Warn, msg)
 }
 
-func LogErr(msg string){
+func LogErr(msg string) {
 	New().Log(Error, msg)
 }
 
 func (l *Logger) initLogger() {
-	// file, err := os.OpenFile("tgfuse.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	// if err != nil {
-	// 	log.Fatalf("Failed to ope log file: %v", err)
-	// }
-	// log.SetOutput(file)
-	// l.file = file
+	file, err := os.OpenFile(configs.LOG_FILE, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+	if err != nil {
+		log.Fatalf("Failed to ope log file: %v", err)
+	}
+	log.SetOutput(file)
+	l.file = file
 	go asyncLogWorker()
 }
 
 func (l *Logger) Close() {
-	closeChan <- 1 
+	closeChan <- 1
 	if l.file != nil {
 		l.file.Close()
 	}
@@ -68,9 +70,9 @@ func (l *Logger) Close() {
 func asyncLogWorker() {
 	for {
 		select {
-		case msg := <- logChan:
+		case msg := <-logChan:
 			log.Println(msg)
-		case <- closeChan:
+		case <-closeChan:
 		}
 	}
 }

@@ -15,7 +15,6 @@ import (
 )
 
 func main() {
-
 	args := os.Args
 	if len(args) < 2 {
 		logger.LogErr("Missing mounting point")
@@ -25,7 +24,7 @@ func main() {
 	root := tgfuse.NewRoot()
 
 	// go StartMemoryChecker()
-	// go StartGarbageCollector(root)
+	go StartGarbageCollector(root)
 
 	server, err := fs.Mount(args[1], root, &fs.Options{
 		MountOptions: fuse.MountOptions{
@@ -62,7 +61,7 @@ func main() {
 			ch := root.NewInode(
 				ctx,
 				&file,
-				fs.StableAttr{Mode: syscall.S_IFREG | 0755},
+				fs.StableAttr{Mode: syscall.S_IFREG | 0o755},
 			)
 			filename := (*files)[idx].OriginalFilename
 			root.AddChild(filename, ch, true)

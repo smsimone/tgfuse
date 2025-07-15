@@ -35,7 +35,7 @@ type sendResponse struct {
 
 func SendFile(ci Sendable) (*string, error) {
 	buf := ci.GetBuffer()
-	if buf == nil || buf.Len()==0 {
+	if buf == nil || buf.Len() == 0 {
 		return nil, fmt.Errorf("missing buffer to send")
 	}
 
@@ -91,13 +91,13 @@ func SendFile(ci Sendable) (*string, error) {
 	logger.LogInfo(fmt.Sprintf("FileID: %s", fileID))
 
 	if strings.Contains(jsonResp.Description, "too Many Requests") {
-		comps := strings.Split(jsonResp.Description,  " ")
+		comps := strings.Split(jsonResp.Description, " ")
 		duration := comps[len(comps)-1]
-	durationVal , err := strconv.Atoi(duration)
-	if err !=nil {
-			logger.LogErr(fmt.Sprintf("Failed to convert %s to int" , duration))
+		durationVal, err := strconv.Atoi(duration)
+		if err != nil {
+			logger.LogErr(fmt.Sprintf("Failed to convert %s to int", duration))
 			return nil, &TooManyRequestsError{Timeout: 8}
-	}
+		}
 		return nil, &TooManyRequestsError{Timeout: durationVal}
 	} else {
 		return nil, fmt.Errorf("%s", jsonResp.Description)

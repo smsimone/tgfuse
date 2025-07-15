@@ -146,13 +146,13 @@ func (cf *ChunkFile) UploadToDatabase() error {
 	return nil
 }
 
-func (cf * ChunkFile) PrefetchChunks (start, end int64){
-	for idx := range cf.Chunks{
+func (cf *ChunkFile) PrefetchChunks(start, end int64) {
+	for idx := range cf.Chunks {
 		chunk := &cf.Chunks[idx]
 		if end <= chunk.Start || start >= chunk.End {
 			continue
 		}
-		if chunk.FileState == MEMORY{
+		if chunk.FileState == MEMORY {
 			continue
 		}
 		chunk.ForceLock()
@@ -196,7 +196,7 @@ func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 }
 
 func (cf *ChunkFile) WriteFile(outFile string) error {
-	file, err := os.OpenFile(outFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	file, err := os.OpenFile(outFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 	if err != nil {
 		logger.LogErr(fmt.Sprintf("Failed to open output file: %s", err.Error()))
 		return err

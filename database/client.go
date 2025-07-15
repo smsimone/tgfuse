@@ -7,11 +7,12 @@ import (
 	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"it.smaso/tgfuse/configs"
 )
 
 func getClient() (*clientv3.Client, error) {
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"89.168.16.172:2379"},
+		Endpoints:   []string{configs.ETCD_URL},
 		DialTimeout: 5 * time.Second,
 	})
 	if err != nil {

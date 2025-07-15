@@ -120,7 +120,7 @@ func (bi *virtualInode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.
 }
 
 func (bi *virtualInode) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	logger.LogInfo(fmt.Sprintf("Opening data from %s"   , bi.name))
+	logger.LogInfo(fmt.Sprintf("Opening data from %s", bi.name))
 	if fuseFlags&(syscall.O_RDWR|syscall.O_WRONLY) != 0 {
 		return nil, 0, syscall.EROFS
 	}
@@ -129,26 +129,25 @@ func (bi *virtualInode) Open(ctx context.Context, openFlags uint32) (fh fs.FileH
 }
 
 func (bi *virtualInode) Flush(ctx context.Context, f fs.FileHandle) syscall.Errno {
-
-	  // Invio l'ultimo chunk che manca
-	  retryCount :=0
-			for {
-				if retryCount > 3 {
-					panic(fmt.Sprintf("Failed to upload chunk [%d] three times in a row", bi.currentChunk.Idx))
-				}
-				if err := bi.currentChunk.Send(); err != nil {
-					if tooManyRequests, ok := err.(*telegram.TooManyRequestsError); ok {
-						logger.LogErr(fmt.Sprintf("Blocked because of too many requests. Retrying in %d seconds", tooManyRequests.Timeout))
-						time.Sleep(time.Duration(tooManyRequests.Timeout) * time.Second)
-					} else {
-						logger.LogErr(fmt.Sprintf("Failed to send chunk [%d] -> %s", bi.currentChunk.Idx, err.Error()))
-						time.Sleep(2 * time.Second)
-					}
-					retryCount++
-				} else {
-					break
-				}
+	// Invio l'ultimo chunk che manca
+	retryCount := 0
+	for {
+		if retryCount > 3 {
+			panic(fmt.Sprintf("Failed to upload chunk [%d] three times in a row", bi.currentChunk.Idx))
+		}
+		if err := bi.currentChunk.Send(); err != nil {
+			if tooManyRequests, ok := err.(*telegram.TooManyRequestsError); ok {
+				logger.LogErr(fmt.Sprintf("Blocked because of too many requests. Retrying in %d seconds", tooManyRequests.Timeout))
+				time.Sleep(time.Duration(tooManyRequests.Timeout) * time.Second)
+			} else {
+				logger.LogErr(fmt.Sprintf("Failed to send chunk [%d] -> %s", bi.currentChunk.Idx, err.Error()))
+				time.Sleep(2 * time.Second)
 			}
+			retryCount++
+		} else {
+			break
+		}
+	}
 
 	for idx := range bi.chunks {
 		chunk := bi.chunks[idx]
@@ -158,8 +157,7 @@ func (bi *virtualInode) Flush(ctx context.Context, f fs.FileHandle) syscall.Errn
 	bi.cf.NumChunks = len(bi.chunks)
 	bi.cf.OriginalSize = int(bi.fileSize)
 
-logger.LogInfo(	fmt.Sprintf("Flushing data from %s", bi.name))
-
+	logger.LogInfo(fmt.Sprintf("Flushing data from %s", bi.name))
 
 	if err := bi.cf.UploadToDatabase(); err != nil {
 		logger.LogErr(fmt.Sprintf("Failed to upload to database %s", err.Error()))
