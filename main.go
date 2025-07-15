@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -30,7 +31,6 @@ func main() {
 
 	// go StartMemoryChecker()
 	go services.StartGarbageCollector(root)
-	go services.UpdateFiles(root)
 
 	server, err := fs.Mount(args[1], root, &fs.Options{
 		MountOptions: fuse.MountOptions{
@@ -77,6 +77,12 @@ func main() {
 			// root.CfChildren[filename] = &file
 		}
 		logger.LogInfo("Added all the entries to root")
+
+		go func() {
+			time.Sleep(5 * time.Second)
+			logger.LogInfo("Started updateFiles service")
+			go services.UpdateFiles(root)
+		}()
 	}()
 
 	if err != nil {

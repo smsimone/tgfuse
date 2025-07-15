@@ -75,29 +75,29 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 		return nil, err
 	}
 
+	logger.LogInfo(fmt.Sprintf("Retrieved %d cfIds", len(*cfIds)))
+
 	var chunkFiles []filesystem.ChunkFile
 	wg := sync.WaitGroup{}
-	var mutex sync.Mutex
 
 	errs := make([]error, 0)
-	for _, cfId := range *cfIds {
+	for idx := range *cfIds {
 		wg.Add(1)
-		go func() {
+		go func(cfID string) {
 			defer wg.Done()
-			cf := filesystem.ChunkFile{Id: cfId, Chunks: []filesystem.ChunkItem{}}
+			cf := filesystem.ChunkFile{Id: cfID, Chunks: []filesystem.ChunkItem{}}
 			keyed := KeyedChunkFile{chunkFile: &cf}
 
 			if err := e.Restore(&keyed); err != nil {
 				logger.LogErr(fmt.Sprintf("Failed to restore cf: %s", err.Error()))
-				mutex.Lock()
 				errs = append(errs, fmt.Errorf("failed to restore cf: %v", err))
-				mutex.Unlock()
 				return
 			}
+			logger.LogInfo("Restored ChunkFile keys")
 
 			var curr int64 = 0
 			for ciIdx := range cf.NumChunks {
-				ci := filesystem.ChunkItem{Idx: ciIdx, ChunkFileId: cfId, Start: curr}
+				ci := filesystem.ChunkItem{Idx: ciIdx, ChunkFileId: cfID, Start: curr}
 				kci := KeyedChunkItem{chunkItem: &ci}
 				if err := e.Restore(&kci); err != nil {
 					logger.LogErr(fmt.Sprintf("Failed to restore cf %s", err.Error()))
@@ -107,12 +107,11 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 					cf.Chunks = append(cf.Chunks, ci)
 				}
 			}
+			logger.LogInfo(fmt.Sprintf("Restored chunkItems for file %s", cf.OriginalFilename))
 
-			mutex.Lock()
 			chunkFiles = append(chunkFiles, cf)
-			mutex.Unlock()
-		}()
-
+			logger.LogInfo(fmt.Sprintf("Restored file %s", cf.OriginalFilename))
+		}((*cfIds)[idx])
 	}
 	wg.Wait()
 
@@ -126,14 +125,18 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 func (err SendKeyErr) Error() string { return fmt.Sprintf("%s: %s", err.Key, err.Err.Error()) }
 
 func (e *etcdClient) getClient() (*clientv3.Client, error) {
+	if e.client != nil {
+		return e.client, nil
+	}
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{e.configs.URL},
-		DialTimeout: 5 * time.Second,
+		DialTimeout: 10 * time.Second,
 	})
 	if err != nil {
 		logger.LogErr("Failed to connect to etcd client")
 		return nil, err
 	}
+	e.client = cli
 	return cli, nil
 }
 
@@ -142,7 +145,6 @@ func (e *etcdClient) putKey(key, val string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	_, err = cli.Put(ctx, key, val)
@@ -157,7 +159,6 @@ func (e *etcdClient) delKey(key string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -173,7 +174,6 @@ func (e *etcdClient) getKey(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	resp, err := cli.Get(ctx, key)
@@ -191,7 +191,6 @@ func (e *etcdClient) GetAllFileIds() (*[]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 

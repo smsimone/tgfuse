@@ -16,7 +16,10 @@ import (
 
 func UpdateFiles(rn *tgfuse.RootNode) {
 	for {
-		files, _ := db.Connect(configs.DB_CONFIG).GetAllChunkFiles()
+		files, err:= db.Connect(configs.DB_CONFIG).GetAllChunkFiles()
+		if err != nil {
+			logger.LogErr(fmt.Sprintf("Failed to retrieve remote files: %s", err.Error()))
+		}
 		currNames := rn.GetCurrentNames()
 		toDelete := map[string]bool{}
 		for _, name := range currNames {
