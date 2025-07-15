@@ -58,7 +58,7 @@ func (l *Logger) initLogger() {
 			log.Fatalf("Failed to create log file -> %s", err.Error())
 		}
 	}
-	// log.SetOutput(file)
+	log.SetOutput(file)
 	l.file = file
 	go asyncLogWorker()
 }
