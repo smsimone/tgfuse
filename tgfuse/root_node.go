@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"it.smaso/tgfuse/filesystem"
@@ -102,6 +103,7 @@ func (rn *RootNode) Create(ctx context.Context, name string, flags uint32, mode 
 		mode: mode,
 		cf: &filesystem.ChunkFile{
 			OriginalFilename: name,
+			Id:               uuid.NewString(),
 		},
 	}
 

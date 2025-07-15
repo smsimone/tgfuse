@@ -11,6 +11,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"it.smaso/tgfuse/configs"
+	db "it.smaso/tgfuse/database"
 	"it.smaso/tgfuse/filesystem"
 	"it.smaso/tgfuse/logger"
 	"it.smaso/tgfuse/telegram"
@@ -47,10 +48,11 @@ func (bi *virtualInode) Write(ctx context.Context, f fs.FileHandle, data []byte,
 	if bi.data == nil {
 		bi.data = make([]byte, 0, configs.CHUNK_SIZE*2)
 		bi.currentChunk = &filesystem.ChunkItem{
-			Idx:       0,
-			Buf:       new(bytes.Buffer),
-			Name:      uuid.NewString(),
-			FileState: filesystem.MEMORY,
+			Idx:         0,
+			Buf:         new(bytes.Buffer),
+			Name:        uuid.NewString(),
+			FileState:   filesystem.MEMORY,
+			ChunkFileId: bi.cf.Id,
 		}
 		bi.chunks = append(bi.chunks, bi.currentChunk)
 	}
@@ -85,10 +87,11 @@ func (bi *virtualInode) Write(ctx context.Context, f fs.FileHandle, data []byte,
 			}
 			logger.LogInfo(fmt.Sprintf("Modified status of chunk [%d] -> %s - %s", bi.currentChunk.Idx, bi.currentChunk.FileState, *bi.currentChunk.FileId))
 			bi.currentChunk = &filesystem.ChunkItem{
-				Idx:       newChunkIdx,
-				Buf:       new(bytes.Buffer),
-				Name:      uuid.NewString(),
-				FileState: filesystem.MEMORY,
+				Idx:         newChunkIdx,
+				Buf:         new(bytes.Buffer),
+				Name:        uuid.NewString(),
+				FileState:   filesystem.MEMORY,
+				ChunkFileId: bi.cf.Id,
 			}
 			bi.chunks = append(bi.chunks, bi.currentChunk)
 			spaceInCurrentChunk = configs.CHUNK_SIZE
@@ -110,6 +113,7 @@ func (bi *virtualInode) Write(ctx context.Context, f fs.FileHandle, data []byte,
 		bi.fileSize += int64(n)
 	}
 
+	logger.LogInfo(fmt.Sprintf("Wrote %d bytes in chunk %d", bytesWritten, bi.currentChunk.Idx))
 	return bytesWritten, 0
 }
 
@@ -135,6 +139,8 @@ func (bi *virtualInode) Flush(ctx context.Context, f fs.FileHandle) syscall.Errn
 		if retryCount > 3 {
 			panic(fmt.Sprintf("Failed to upload chunk [%d] three times in a row", bi.currentChunk.Idx))
 		}
+		bi.currentChunk.Size = bi.currentChunk.Buf.Len()
+
 		if err := bi.currentChunk.Send(); err != nil {
 			if tooManyRequests, ok := err.(*telegram.TooManyRequestsError); ok {
 				logger.LogErr(fmt.Sprintf("Blocked because of too many requests. Retrying in %d seconds", tooManyRequests.Timeout))
@@ -159,7 +165,7 @@ func (bi *virtualInode) Flush(ctx context.Context, f fs.FileHandle) syscall.Errn
 
 	logger.LogInfo(fmt.Sprintf("Flushing data from %s", bi.name))
 
-	if err := bi.cf.UploadToDatabase(); err != nil {
+	if err := db.Connect(configs.DB_CONFIG).UploadFile(bi.cf); err != nil {
 		logger.LogErr(fmt.Sprintf("Failed to upload to database %s", err.Error()))
 		return syscall.EIO
 	}

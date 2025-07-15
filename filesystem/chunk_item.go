@@ -3,10 +3,8 @@ package filesystem
 import (
 	"bytes"
 	"fmt"
-	"strconv"
 	"sync"
 
-	"it.smaso/tgfuse/database"
 	"it.smaso/tgfuse/logger"
 	"it.smaso/tgfuse/telegram"
 )
@@ -26,7 +24,7 @@ type ChunkItem struct {
 	Buf         *bytes.Buffer
 	FileId      *string
 	FileState   Status
-	chunkFileId string
+	ChunkFileId string
 	lock        sync.Mutex
 
 	Start int64
@@ -46,9 +44,6 @@ func (ci *ChunkItem) CanBeSent() bool {
 }
 
 func (ci *ChunkItem) Send() error {
-	if !ci.CanBeSent() {
-		panic(fmt.Sprintf("Cannot send chunk [%d]", ci.Idx))
-	}
 	fileID, err := telegram.SendFile(ci)
 	if err != nil {
 		logger.LogErr(fmt.Sprintf("Chunk [%d] has not been sent", ci.Idx))
@@ -83,37 +78,5 @@ func (ci *ChunkItem) PruneFromRam() {
 		ci.Buf = nil
 		ci.FileState = UPLOADED
 		ci.Buf = &bytes.Buffer{}
-	}
-}
-
-func (ci *ChunkItem) GetKeyParams() []database.KeyParam {
-	return []database.KeyParam{
-		{
-			Key: fmt.Sprintf("/ci/%s/%d/size", ci.chunkFileId, ci.Idx),
-			GetValue: func() string {
-				return strconv.Itoa(ci.Size)
-			},
-			SetValue: func(s string) {
-				ci.Size, _ = strconv.Atoi(s)
-			},
-		},
-		{
-			Key: fmt.Sprintf("/ci/%s/%d/name", ci.chunkFileId, ci.Idx),
-			GetValue: func() string {
-				return ci.Name
-			},
-			SetValue: func(s string) {
-				ci.Name = s
-			},
-		},
-		{
-			Key: fmt.Sprintf("/ci/%s/%d/file_id", ci.chunkFileId, ci.Idx),
-			GetValue: func() string {
-				return *ci.FileId
-			},
-			SetValue: func(s string) {
-				ci.FileId = &s
-			},
-		},
 	}
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 	"time"
 
 	"it.smaso/tgfuse/configs"
@@ -21,7 +20,7 @@ func StartGarbageCollector(rootNode *tgfuse.RootNode) {
 				}
 			}
 		}
-		runtime.GC()
+		// runtime.GC()
 		time.Sleep(time.Duration(configs.GC_DELAY) * time.Second)
 	}
 }

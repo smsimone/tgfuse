@@ -53,9 +53,12 @@ func LogErr(msg string) {
 func (l *Logger) initLogger() {
 	file, err := os.OpenFile(configs.LOG_FILE, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 	if err != nil {
-		log.Fatalf("Failed to ope log file: %v", err)
+		file, err = os.Create(configs.LOG_FILE)
+		if err != nil {
+			log.Fatalf("Failed to create log file -> %s", err.Error())
+		}
 	}
-	log.SetOutput(file)
+	// log.SetOutput(file)
 	l.file = file
 	go asyncLogWorker()
 }

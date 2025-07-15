@@ -9,7 +9,8 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
-	"it.smaso/tgfuse/filesystem"
+	"it.smaso/tgfuse/configs"
+	db "it.smaso/tgfuse/database"
 	"it.smaso/tgfuse/logger"
 	"it.smaso/tgfuse/tgfuse"
 )
@@ -23,8 +24,11 @@ func main() {
 
 	root := tgfuse.NewRoot()
 
+	database := db.Connect(configs.DB_CONFIG)
+	logger.LogInfo("Connected to database")
+
 	// go StartMemoryChecker()
-	go StartGarbageCollector(root)
+	// go StartGarbageCollector(root)
 
 	server, err := fs.Mount(args[1], root, &fs.Options{
 		MountOptions: fuse.MountOptions{
@@ -53,7 +57,7 @@ func main() {
 	}()
 
 	go func() {
-		files, _ := filesystem.FetchFromEtcd()
+		files, _ := database.GetAllChunkFiles()
 		for idx := range *files {
 			ctx := context.Background()
 			file := tgfuse.CfInode{File: &(*files)[idx]}
