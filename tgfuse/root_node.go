@@ -2,11 +2,13 @@ package tgfuse
 
 import (
 	"context"
-	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
 	"log"
 	"syscall"
 	"time"
+
+	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
+	"it.smaso/tgfuse/filesystem"
 )
 
 type RootNode struct {
@@ -93,12 +95,13 @@ func (rn *RootNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut)
 
 func (rn *RootNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (node *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	log.Println("Creating File", name)
-	out.Mode = mode
-	out.Size = 0
 
 	bInode := virtualInode{
 		name: name,
 		mode: mode,
+		cf: &filesystem.ChunkFile{
+			OriginalFilename: name,
+		},
 	}
 
 	ch := rn.NewInode(

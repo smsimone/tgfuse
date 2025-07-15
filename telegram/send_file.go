@@ -5,15 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"it.smaso/tgfuse/configs"
 )
 
+type TooManyRequestsError struct {
+	Timeout int
+}
+
+func (t *TooManyRequestsError) Error() string {
+	return fmt.Sprintf("Too many requests: retry after %d", t.Timeout)
+}
+
 type sendResponse struct {
-	Ok     bool `json:"ok"`
-	Result struct {
+	Ok          bool   `json:"ok"`
+	ErrorCode   int    `json:"error_code"`
+	Description string `json:"description"`
+	Result      struct {
 		Document struct {
 			FileId string `json:"file_id"`
 		} `json:"document"`
@@ -22,7 +35,7 @@ type sendResponse struct {
 
 func SendFile(ci Sendable) (*string, error) {
 	buf := ci.GetBuffer()
-	if buf == nil {
+	if buf == nil || buf.Len()==0 {
 		return nil, fmt.Errorf("missing buffer to send")
 	}
 
@@ -70,7 +83,24 @@ func SendFile(ci Sendable) (*string, error) {
 		return nil, fmt.Errorf("failed to unmarshal response: %s", err.Error())
 	}
 
-	fmt.Println("response:", jsonResp.Result.Document.FileId)
+	fileID := jsonResp.Result.Document.FileId
+	if jsonResp.Ok {
+		return &fileID, nil
+	}
 
-	return &jsonResp.Result.Document.FileId, nil
+	fmt.Println("FileID:", fileID)
+
+	if strings.Contains(jsonResp.Description, "too Many Requests") {
+		comps := strings.Split(jsonResp.Description,  " ")
+		duration := comps[len(comps)-1]
+		log.Println("Timeout", duration)
+	durationVal , err := strconv.Atoi(duration)
+	if err !=nil {
+		log.Printf("Failed to convert %s to int\n" , duration)
+			return nil, &TooManyRequestsError{Timeout: 8}
+	}
+		return nil, &TooManyRequestsError{Timeout: durationVal}
+	} else {
+		return nil, fmt.Errorf("%s", jsonResp.Description)
+	}
 }
