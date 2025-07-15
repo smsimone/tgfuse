@@ -113,7 +113,6 @@ func (bi *virtualInode) Write(ctx context.Context, f fs.FileHandle, data []byte,
 		bi.fileSize += int64(n)
 	}
 
-	logger.LogInfo(fmt.Sprintf("Wrote %d bytes in chunk %d", bytesWritten, bi.currentChunk.Idx))
 	return bytesWritten, 0
 }
 
