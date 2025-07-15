@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"it.smaso/tgfuse/configs"
+	"it.smaso/tgfuse/logger"
 )
 
 type TooManyRequestsError struct {
@@ -88,15 +88,14 @@ func SendFile(ci Sendable) (*string, error) {
 		return &fileID, nil
 	}
 
-	fmt.Println("FileID:", fileID)
+	logger.LogInfo(fmt.Sprintf("FileID: %s", fileID))
 
 	if strings.Contains(jsonResp.Description, "too Many Requests") {
 		comps := strings.Split(jsonResp.Description,  " ")
 		duration := comps[len(comps)-1]
-		log.Println("Timeout", duration)
 	durationVal , err := strconv.Atoi(duration)
 	if err !=nil {
-		log.Printf("Failed to convert %s to int\n" , duration)
+			logger.LogErr(fmt.Sprintf("Failed to convert %s to int" , duration))
 			return nil, &TooManyRequestsError{Timeout: 8}
 	}
 		return nil, &TooManyRequestsError{Timeout: durationVal}

@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"it.smaso/tgfuse/configs"
-	"log"
 	"net/http"
+
+	"it.smaso/tgfuse/configs"
+	"it.smaso/tgfuse/logger"
 )
 
 var instance *Telegram
@@ -60,7 +61,7 @@ func (tg *Telegram) DownloadFile(fileId string) (*[]byte, error) {
 
 	filePath, err := getFilePath(fileId)
 	if err != nil {
-		log.Println("Failed to get file path", err)
+		logger.LogErr(fmt.Sprintf("Failed to get file path: %s", err))
 		return nil, err
 	}
 
@@ -68,13 +69,13 @@ func (tg *Telegram) DownloadFile(fileId string) (*[]byte, error) {
 
 	req, err := http.NewRequest("GET", url, &bytes.Buffer{})
 	if err != nil {
-		log.Println("Failed to create request", err)
+		logger.LogErr(fmt.Sprintf("Failed to create request: %s", err))
 		return nil, err
 	}
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Println("Failed to send request", err)
+		logger.LogErr(fmt.Sprintf("Failed to send request: %s", err))
 		return nil, err
 	}
 	defer resp.Body.Close()

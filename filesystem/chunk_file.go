@@ -4,16 +4,17 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
-	"it.smaso/tgfuse/configs"
-	"it.smaso/tgfuse/database"
-	"log"
 	"os"
 	"path"
 	"slices"
 	"strconv"
 	"sync"
+
+	"github.com/google/uuid"
+	"it.smaso/tgfuse/configs"
+	"it.smaso/tgfuse/database"
+	"it.smaso/tgfuse/logger"
 )
 
 // ChunkFile represents the aggregation of all the chunks
@@ -90,7 +91,7 @@ func FetchFromEtcd() (*[]ChunkFile, error) {
 			cf := ChunkFile{Id: cfId, Chunks: []ChunkItem{}}
 
 			if err := database.Restore(&cf); err != nil {
-				fmt.Println("Failed to restore cf", err)
+				logger.LogErr(fmt.Sprintf("Failed to restore cf: %s", err.Error()))
 				mutex.Lock()
 				errs = append(errs, fmt.Errorf("failed to restore cf: %v", err))
 				mutex.Unlock()
@@ -101,7 +102,7 @@ func FetchFromEtcd() (*[]ChunkFile, error) {
 			for ciIdx := range cf.NumChunks {
 				ci := ChunkItem{Idx: ciIdx, chunkFileId: cfId, Start: curr}
 				if err := database.Restore(&ci); err != nil {
-					log.Println("Failed to restore cf", err)
+					logger.LogErr(fmt.Sprintf("Failed to restore cf %s", err.Error()))
 				} else {
 					ci.End = ci.Start + int64(ci.Size)
 					curr += int64(ci.Size)
@@ -126,23 +127,41 @@ func FetchFromEtcd() (*[]ChunkFile, error) {
 
 func (cf *ChunkFile) UploadToDatabase() error {
 	if err := database.SendFile(cf); err != nil {
-		fmt.Printf("Failed to send ChunkFile to database: %s", err.Error())
+		logger.LogErr(fmt.Sprintf("Failed to send ChunkFile to database: %s", err.Error()))
 		return err
 	}
 
 	for idx := range cf.Chunks {
 		chunk := &cf.Chunks[idx]
 		if chunk.FileId == nil {
-			fmt.Println("Somehow the file id came null")
+			logger.LogErr("Somehow the file id came null")
 			os.Exit(1)
 		}
 		if err := database.SendFile(chunk); err != nil {
-			fmt.Printf("Failed to send ChunkItem to database: %s", err.Error())
+			logger.LogErr(fmt.Sprintf("Failed to send ChunkItem to database: %s", err.Error()))
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (cf * ChunkFile) PrefetchChunks (start, end int64){
+	for idx := range cf.Chunks{
+		chunk := &cf.Chunks[idx]
+		if end <= chunk.Start || start >= chunk.End {
+			continue
+		}
+		if chunk.FileState == MEMORY{
+			continue
+		}
+		chunk.ForceLock()
+		go func(item *ChunkItem) {
+			if err := item.FetchBuffer(); err != nil {
+				logger.LogErr(fmt.Sprintf("Failed to fetch buffer %s", err.Error()))
+			}
+		}(chunk)
+	}
 }
 
 func (cf *ChunkFile) GetBytes(start, end int64) []byte {
@@ -152,7 +171,6 @@ func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 
 		// Skip chunks that do not intersect the requested range
 		if end <= chunk.Start || start >= chunk.End {
-			// log.Printf("Skipped chunk [%d]: no overlap with [%d:%d]\n", chunk.Idx, start, end)
 			continue
 		}
 
@@ -164,12 +182,12 @@ func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 		buf := chunk.Buf.Bytes()
 
 		if relativeStart >= int64(len(buf)) || relativeEnd > int64(len(buf)) {
-			log.Printf("Invalid range [%d:%d] for chunk %d (buffer size %d)\n", relativeStart, relativeEnd, chunk.Idx, len(buf))
+			logger.LogErr(fmt.Sprintf("Invalid range [%d:%d] for chunk %d (buffer size %d)", relativeStart, relativeEnd, chunk.Idx, len(buf)))
 			chunk.lock.Unlock()
 			continue
 		}
 
-		log.Printf("Copying bytes from chunk %d [%d:%d]\n", idx, relativeStart, relativeEnd)
+		logger.LogInfo(fmt.Sprintf("Copying bytes from chunk %d [%d:%d]", idx, relativeStart, relativeEnd))
 		result = append(result, buf[relativeStart:relativeEnd]...)
 		chunk.lock.Unlock()
 	}
@@ -180,19 +198,20 @@ func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 func (cf *ChunkFile) WriteFile(outFile string) error {
 	file, err := os.OpenFile(outFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
-		fmt.Println("Failed to open output file", err)
+		logger.LogErr(fmt.Sprintf("Failed to open output file: %s", err.Error()))
 		return err
 	}
 	defer file.Close()
 
-	for _, chunk := range cf.Chunks {
+	for idx := range cf.Chunks {
+		chunk := &cf.Chunks[idx]
 		if chunk.Buf == nil {
 			return fmt.Errorf("buffer was nil for chunk %d", chunk.Idx)
 		}
 		_, _ = file.Write(chunk.Buf.Bytes())
 	}
 
-	fmt.Println("Wrote file", outFile)
+	logger.LogInfo(fmt.Sprintf("Wrote file: %s", outFile))
 	return nil
 }
 

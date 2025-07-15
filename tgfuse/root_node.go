@@ -2,13 +2,14 @@ package tgfuse
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"syscall"
 	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"it.smaso/tgfuse/filesystem"
+	"it.smaso/tgfuse/logger"
 )
 
 type RootNode struct {
@@ -68,7 +69,7 @@ func (rn *RootNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 }
 
 func (rn *RootNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	log.Println("Looking up for file", name)
+	logger.LogInfo(fmt.Sprintf("Looking up for file %s", name))
 	node, ok := rn.Children()[name]
 	if !ok {
 		return nil, syscall.ENOENT
@@ -94,7 +95,7 @@ func (rn *RootNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut)
 }
 
 func (rn *RootNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (node *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	log.Println("Creating File", name)
+	logger.LogInfo(fmt.Sprintf("Creating File %s", name))
 
 	bInode := virtualInode{
 		name: name,

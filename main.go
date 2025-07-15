@@ -3,21 +3,22 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
-	"it.smaso/tgfuse/filesystem"
-	"it.smaso/tgfuse/tgfuse"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
+	"it.smaso/tgfuse/filesystem"
+	"it.smaso/tgfuse/logger"
+	"it.smaso/tgfuse/tgfuse"
 )
 
 func main() {
 
 	args := os.Args
 	if len(args) < 2 {
-		fmt.Println("Missing mounting point")
+		logger.LogErr("Missing mounting point")
 		os.Exit(1)
 	}
 
@@ -47,7 +48,7 @@ func main() {
 		switch sig := <-signals; sig {
 		case syscall.SIGINT, syscall.SIGTERM:
 			_ = server.Unmount()
-			log.Println("Unmounted tgfuse folder")
+			logger.LogInfo("Unmounted tgfuse folder")
 			os.Exit(0)
 		}
 	}()
@@ -70,12 +71,12 @@ func main() {
 			root.Nodes[filename] = &file
 			// root.CfChildren[filename] = &file
 		}
-		log.Println("Added all the entries to root")
+		logger.LogInfo("Added all the entries to root")
 	}()
 
 	if err != nil {
-		log.Fatalf("Mount failed: %v\n", err)
+		panic(fmt.Sprintf("Mount failed: %v", err))
 	}
-	log.Println("Mounted successfully")
+	logger.LogInfo("Mounted successfully")
 	server.Wait()
 }

@@ -1,10 +1,12 @@
 package main
 
 import (
-	"it.smaso/tgfuse/tgfuse"
-	"log"
+	"fmt"
 	"runtime"
 	"time"
+
+	"it.smaso/tgfuse/logger"
+	"it.smaso/tgfuse/tgfuse"
 )
 
 func StartGarbageCollector(rootNode *tgfuse.RootNode) {
@@ -14,7 +16,7 @@ func StartGarbageCollector(rootNode *tgfuse.RootNode) {
 			if node, ok := rootNode.Nodes[name]; ok {
 				if node.ReadyForCleanup() {
 					node.ClearBuffers()
-					log.Println("Cleared buffers of", name)
+					logger.LogInfo(fmt.Sprintf("Cleared buffers of %s", name))
 				}
 			}
 		}

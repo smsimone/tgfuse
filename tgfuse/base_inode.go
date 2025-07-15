@@ -3,7 +3,7 @@ package tgfuse
 import (
 	"bytes"
 	"context"
-	"log"
+	"fmt"
 	"syscall"
 	"time"
 
@@ -12,6 +12,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"it.smaso/tgfuse/configs"
 	"it.smaso/tgfuse/filesystem"
+	"it.smaso/tgfuse/logger"
 	"it.smaso/tgfuse/telegram"
 )
 
@@ -67,14 +68,14 @@ func (bi *virtualInode) Write(ctx context.Context, f fs.FileHandle, data []byte,
 			retryCount := 0
 			for {
 				if retryCount > 3 {
-					log.Panicf("Failed to upload chunk [%d] three times in a row\n", bi.currentChunk.Idx)
+					panic(fmt.Sprintf("Failed to upload chunk [%d] three times in a row", bi.currentChunk.Idx))
 				}
 				if err := bi.currentChunk.Send(); err != nil {
 					if tooManyRequests, ok := err.(*telegram.TooManyRequestsError); ok {
-						log.Printf("Blocked because of too many requests. Retrying in %d seconds", tooManyRequests.Timeout)
+						logger.LogWarn(fmt.Sprintf("Blocked because of too many requests. Retrying in %d seconds", tooManyRequests.Timeout))
 						time.Sleep(time.Duration(tooManyRequests.Timeout) * time.Second)
 					} else {
-						log.Printf("Failed to send chunk [%d] -> %s", bi.currentChunk.Idx, err.Error())
+						logger.LogWarn(fmt.Sprintf("Failed to send chunk [%d] -> %s", bi.currentChunk.Idx, err.Error()))
 						time.Sleep(2 * time.Second)
 					}
 					retryCount++
@@ -82,7 +83,7 @@ func (bi *virtualInode) Write(ctx context.Context, f fs.FileHandle, data []byte,
 					break
 				}
 			}
-			log.Printf("Modified status of chunk [%d] -> %s - %s\n", bi.currentChunk.Idx, bi.currentChunk.FileState, *bi.currentChunk.FileId)
+			logger.LogInfo(fmt.Sprintf("Modified status of chunk [%d] -> %s - %s", bi.currentChunk.Idx, bi.currentChunk.FileState, *bi.currentChunk.FileId))
 			bi.currentChunk = &filesystem.ChunkItem{
 				Idx:       newChunkIdx,
 				Buf:       new(bytes.Buffer),
@@ -99,7 +100,7 @@ func (bi *virtualInode) Write(ctx context.Context, f fs.FileHandle, data []byte,
 		// copio i nuovi dati all'interno del chunk
 		n, err := bi.currentChunk.Buf.Write(remainingData[:writeLen])
 		if err != nil {
-			log.Printf("Errore durante la scrittura nel buffer del chunk: %v", err)
+			logger.LogErr(fmt.Sprintf("Errore durante la scrittura nel buffer del chunk: %v", err))
 			return bytesWritten, syscall.EIO // O un altro errore appropriato
 		}
 
@@ -119,7 +120,7 @@ func (bi *virtualInode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.
 }
 
 func (bi *virtualInode) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	log.Println("Opening data from", bi.name)
+	logger.LogInfo(fmt.Sprintf("Opening data from %s"   , bi.name))
 	if fuseFlags&(syscall.O_RDWR|syscall.O_WRONLY) != 0 {
 		return nil, 0, syscall.EROFS
 	}
@@ -133,14 +134,14 @@ func (bi *virtualInode) Flush(ctx context.Context, f fs.FileHandle) syscall.Errn
 	  retryCount :=0
 			for {
 				if retryCount > 3 {
-					log.Panicf("Failed to upload chunk [%d] three times in a row\n", bi.currentChunk.Idx)
+					panic(fmt.Sprintf("Failed to upload chunk [%d] three times in a row", bi.currentChunk.Idx))
 				}
 				if err := bi.currentChunk.Send(); err != nil {
 					if tooManyRequests, ok := err.(*telegram.TooManyRequestsError); ok {
-						log.Printf("Blocked because of too many requests. Retrying in %d seconds", tooManyRequests.Timeout)
+						logger.LogErr(fmt.Sprintf("Blocked because of too many requests. Retrying in %d seconds", tooManyRequests.Timeout))
 						time.Sleep(time.Duration(tooManyRequests.Timeout) * time.Second)
 					} else {
-						log.Printf("Failed to send chunk [%d] -> %s", bi.currentChunk.Idx, err.Error())
+						logger.LogErr(fmt.Sprintf("Failed to send chunk [%d] -> %s", bi.currentChunk.Idx, err.Error()))
 						time.Sleep(2 * time.Second)
 					}
 					retryCount++
@@ -151,16 +152,17 @@ func (bi *virtualInode) Flush(ctx context.Context, f fs.FileHandle) syscall.Errn
 
 	for idx := range bi.chunks {
 		chunk := bi.chunks[idx]
-		log.Printf("Chunk: [%d] State: [%s] Id: [%p]\n", chunk.Idx, chunk.FileState, chunk.FileId)
+		logger.LogInfo(fmt.Sprintf("Chunk: [%d] State: [%s] Id: [%p]", chunk.Idx, chunk.FileState, chunk.FileId))
 		bi.cf.Chunks = append(bi.cf.Chunks, *chunk)
 	}
 	bi.cf.NumChunks = len(bi.chunks)
 	bi.cf.OriginalSize = int(bi.fileSize)
 
-	log.Println("Flushing data from", bi.name)
+logger.LogInfo(	fmt.Sprintf("Flushing data from %s", bi.name))
+
 
 	if err := bi.cf.UploadToDatabase(); err != nil {
-		log.Println("Failed to upload to database", err)
+		logger.LogErr(fmt.Sprintf("Failed to upload to database %s", err.Error()))
 		return syscall.EIO
 	}
 

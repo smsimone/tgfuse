@@ -2,7 +2,7 @@ package tgfuse
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"sort"
 	"sync"
 	"syscall"
@@ -11,6 +11,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"it.smaso/tgfuse/filesystem"
+	"it.smaso/tgfuse/logger"
 )
 
 const TTL = 5 * 60 // seconds
@@ -66,12 +67,11 @@ func (cf *CfInode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrO
 }
 
 func (h *CfHandle) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	log.Printf(">> CfHandle.Read(): off=%d len=%d", off, len(dest))
 	return h.inode.Read(ctx, h, dest, off)
 }
 
 func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	log.Println("Looking up File", name)
+	logger.LogInfo(fmt.Sprintf("Looking up File %s", name))
 	out.Mode = 0o755
 	out.Size = uint64(cf.File.OriginalSize)
 	return &cf.Inode, 0
@@ -84,25 +84,13 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 		cf.currentlyRead = false
 	}()
 
-	end := off + int64(len(dest))
-
-	if end > int64(cf.File.OriginalSize) {
-		end = int64(cf.File.OriginalSize)
-	}
+	end := min(off+int64(len(dest)), int64(cf.File.OriginalSize))
 
 	sort.Slice(cf.File.Chunks, func(i, j int) bool {
 		return cf.File.Chunks[i].Idx < cf.File.Chunks[j].Idx
 	})
 
-	for idx := range cf.File.Chunks {
-		ci := &cf.File.Chunks[idx]
-		ci.ForceLock()
-		go func(item *filesystem.ChunkItem) {
-			if err := ci.FetchBuffer(); err != nil {
-				log.Println("Failed to fetch buffer", err)
-			}
-		}(ci)
-	}
+	cf.File.PrefetchChunks(off, end)
 
 	bytes := cf.File.GetBytes(off, end)
 	return fuse.ReadResultData(bytes), 0
@@ -110,7 +98,6 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 
 func (cf *CfInode) Open(ctx context.Context, openFlags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	if openFlags&(syscall.O_WRONLY|syscall.O_RDWR) != 0 {
-		log.Println("Returning EROFS")
 		return nil, 0, syscall.EROFS
 	}
 

@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"runtime"
 	"time"
+
+	"it.smaso/tgfuse/logger"
 )
 
 func StartMemoryChecker() {
-	log.Println("Starting memory checker")
+	logger.LogInfo("Starting memory checker")
 	file, err := os.OpenFile("/Users/antlia/Development/tgfuse_go/stats.csv", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 	if err != nil {
 		file, _ = os.Create("/Users/antlia/Development/tgfuse_go/stats.csv")

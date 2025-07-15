@@ -3,11 +3,11 @@ package filesystem
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"strconv"
 	"sync"
 
 	"it.smaso/tgfuse/database"
+	"it.smaso/tgfuse/logger"
 	"it.smaso/tgfuse/telegram"
 )
 
@@ -34,11 +34,7 @@ type ChunkItem struct {
 }
 
 func (ci *ChunkItem) GetBuffer() *bytes.Buffer {
-	 bts := ci.Buf.Bytes()
-	 if ci.Buf.Len() ==0{
-		log.Panicf("Buffer was consumed")
-	 }
-	 return bytes.NewBuffer(bts)
+	 return bytes.NewBuffer(ci.Buf.Bytes())
 }
 
 func (ci *ChunkItem) GetName() string {
@@ -51,11 +47,11 @@ func (ci *ChunkItem) CanBeSent() bool {
 
 func (ci *ChunkItem) Send() error {
 	if !ci.CanBeSent() {
-		log.Panicf("Cannot send chunk [%d]", ci.Idx)
+		panic(fmt.Sprintf("Cannot send chunk [%d]", ci.Idx))
 	}
 	fileID, err := telegram.SendFile(ci)
 	if err != nil {
-		log.Printf("Chunk [%d] has not been sent", ci.Idx)
+		logger.LogErr(fmt.Sprintf("Chunk [%d] has not been sent", ci.Idx))
 		return err
 	}
 	ci.FileId = fileID
