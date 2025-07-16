@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"slices"
@@ -13,6 +14,13 @@ import (
 	"it.smaso/tgfuse/logger"
 )
 
+// temporaryFile represents the temporary file containing the
+type temporaryFile struct {
+	name           string
+	handle         *fs.File
+	bytesAvailable int64 // contains the number of available bytes counting from 0
+}
+
 // ChunkFile represents the aggregation of all the chunks
 type ChunkFile struct {
 	Ino              uint64
@@ -21,8 +29,10 @@ type ChunkFile struct {
 	OriginalSize     int
 	NumChunks        int
 	Chunks           []ChunkItem
+	tmpFile          *temporaryFile
 }
 
+// ReadChunkFile reads a file given its path and creates its correspondent chunk file
 func ReadChunkfile(filepath string) (*ChunkFile, error) {
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -38,6 +48,7 @@ func ReadChunkfile(filepath string) (*ChunkFile, error) {
 	return SplitBytes(path.Base(filepath), &fileBytes)
 }
 
+// SplitBytes given the bytes of the file, splits then in the correspondent chunk file
 func SplitBytes(filename string, fileBytes *[]byte) (*ChunkFile, error) {
 	if fileBytes == nil {
 		panic("fileBytes must not be nil")
@@ -69,6 +80,7 @@ func SplitBytes(filename string, fileBytes *[]byte) (*ChunkFile, error) {
 	return &cf, nil
 }
 
+// PrefetcChunks downloads all the chunks which intersects the interval [start, end]
 func (cf *ChunkFile) PrefetchChunks(start, end int64) {
 	for idx := range cf.Chunks {
 		chunk := &cf.Chunks[idx]
@@ -88,17 +100,18 @@ func (cf *ChunkFile) PrefetchChunks(start, end int64) {
 }
 
 func (cf *ChunkFile) GetBytes(start, end int64) []byte {
+	if cf.tmpFile != nil && cf.tmpFile.bytesAvailable >= end {
+		// handle := cf.tmpFile.handle
+	}
+
 	var result []byte
 	for idx := range cf.Chunks {
 		chunk := &cf.Chunks[idx]
 
-		// Skip chunks that do not intersect the requested range
 		if end <= chunk.Start || start >= chunk.End {
-			// logger.LogInfo(fmt.Sprintf("Skipping chunk %d: doesn't intersect with req(%d, %d) <> chunk(%d, %d)", idx, start, end, chunk.Start, chunk.End))
 			continue
 		}
 
-		// Compute relative positions within this chunk
 		relativeStart := max(0, start-chunk.Start)
 		relativeEnd := min(chunk.End-chunk.Start, end-chunk.Start)
 
@@ -119,6 +132,7 @@ func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 	return result
 }
 
+// WriteFile writes all the chunk files to a file
 func (cf *ChunkFile) WriteFile(outFile string) error {
 	file, err := os.OpenFile(outFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 	if err != nil {
