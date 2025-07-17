@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -191,7 +192,7 @@ func SplitBytes(filename string, fileBytes *[]byte) (*ChunkFile, error) {
 }
 
 // StartDownload locks and starts the download of all the chunks, if needed
-func (cf *ChunkFile) StartDownload() {
+func (cf *ChunkFile) StartDownload(ctx context.Context) {
 	if cf.isDownloading {
 		return
 	}
@@ -201,21 +202,36 @@ func (cf *ChunkFile) StartDownload() {
 
 	cf.isDownloading = true
 
+	wg := sync.WaitGroup{}
+	wg.Add(cf.NumChunks)
+
 	go func() {
 		for idx := range cf.Chunks {
-			ci := cf.Chunks[idx]
-			if ci.shouldBeDownloaded() {
-				ci.lock.Lock()
-				logger.LogInfo(fmt.Sprintf("Locked chunk [%d] to be downloaded", ci.Idx))
-				if err := ci.fetchBuffer(cf); err != nil {
-					logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", ci.Idx, err.Error()))
+			select {
+			case <-ctx.Done():
+				cf.DeleteTmpFile()
+				logger.LogInfo("Stopped downloading chunks and deleted tmpfile")
+				return
+			default:
+				ci := cf.Chunks[idx]
+				if ci.shouldBeDownloaded() {
+					ci.lock.Lock()
+					wg.Done()
+					logger.LogInfo(fmt.Sprintf("Locked chunk [%d] to be downloaded", ci.Idx))
+					go func(item *ChunkItem) {
+						defer item.lock.Unlock()
+						if err := item.fetchBuffer(cf); err != nil {
+							logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", item.Idx, err.Error()))
+						}
+						logger.LogInfo(fmt.Sprintf("Unlocked chunk [%d]", item.Idx))
+					}(ci)
 				}
-				ci.lock.Unlock()
-				logger.LogInfo(fmt.Sprintf("Unlocked chunk [%d]", ci.Idx))
 			}
 		}
 		cf.isDownloading = false
 	}()
+
+	wg.Wait()
 }
 
 func (cf *ChunkFile) GetBytes(start, end int64) []byte {

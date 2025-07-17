@@ -21,6 +21,8 @@ type CfInode struct {
 	lastRead      time.Time
 	currentlyRead bool
 	writeTmpFile  sync.Once
+
+	cancel *context.CancelCauseFunc
 }
 
 type CfHandle struct {
@@ -36,6 +38,7 @@ var (
 	_ = (fs.NodeOpener)((*CfInode)(nil))
 	_ = (fs.NodeReader)((*CfInode)(nil))
 	_ = (fs.NodeGetattrer)((*CfInode)(nil))
+	_ = (fs.NodeReleaser)((*CfInode)(nil))
 )
 
 var (
@@ -76,9 +79,25 @@ func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 	return &cf.Inode, 0
 }
 
+func (cf *CfInode) Release(ctx context.Context, f fs.FileHandle) syscall.Errno {
+	logger.LogInfo(fmt.Sprintf("File '%s' has been released", cf.File.OriginalFilename))
+	if cf.cancel != nil {
+		(*cf.cancel)(fmt.Errorf("file released"))
+		cf.cancel = nil
+		logger.LogInfo(fmt.Sprintf("Removed from CfInode %p canceContext -> %p", cf, cf.cancel))
+	}
+	return 0
+}
+
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	cf.File.WaitForReadable()
-	cf.File.StartDownload()
+	logger.LogInfo(fmt.Sprintf("CfInode %p has cancel -> %p", cf, cf.cancel))
+	if cf.cancel == nil {
+		ctx, cancel := context.WithCancelCause(context.Background())
+		cf.cancel = &cancel
+		cf.File.StartDownload(ctx)
+		logger.LogInfo(fmt.Sprintf("Started download for file %s", cf.File.OriginalFilename))
+	}
 
 	logger.LogInfo(fmt.Sprintf("Reading content of file %s", cf.File.OriginalFilename))
 	cf.lastRead = time.Now()
