@@ -77,6 +77,8 @@ func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	cf.File.StartDownload()
+
 	logger.LogInfo(fmt.Sprintf("Reading content of file %s", cf.File.OriginalFilename))
 	cf.lastRead = time.Now()
 	cf.currentlyRead = true
@@ -89,8 +91,6 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 	sort.Slice(cf.File.Chunks, func(i, j int) bool {
 		return cf.File.Chunks[i].Idx < cf.File.Chunks[j].Idx
 	})
-
-	cf.File.PrefetchChunks(off, end)
 
 	bytes := cf.File.GetBytes(off, end)
 	return fuse.ReadResultData(bytes), 0

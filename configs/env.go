@@ -41,4 +41,5 @@ var (
 	DB_CONFIG    DBConfig = &EtcdConfig{
 		URL: "89.168.16.172:2379",
 	}
+	TMP_FILE_FOLDER = "/tmp/tgfuse"
 )

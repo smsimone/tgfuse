@@ -14,6 +14,7 @@ type Status = string
 const (
 	UPLOADED Status = "uploaded"
 	MEMORY   Status = "memory"
+	FILE     Status = "file"
 )
 
 // ChunkItem is the single chunk that has been uploaded
@@ -59,18 +60,58 @@ func (ci *ChunkItem) ForceLock() {
 	ci.lock.Lock()
 }
 
-func (ci *ChunkItem) FetchBuffer() error {
-	defer ci.lock.Unlock()
-	if ci.FileState == MEMORY {
+func (ci *ChunkItem) FetchBuffer(cf *ChunkFile) error {
+	if ci.FileState == MEMORY || ci.FileState == FILE {
+		logger.LogErr(fmt.Sprintf("ignored request to fetch already downloaded buffer for chunk [%d]", ci.Idx))
 		return nil
 	}
 	bts, err := telegram.GetInstance().DownloadFile(*ci.FileId)
 	if err != nil {
+		logger.LogErr(fmt.Sprintf("failed to download chunk [%d]: %s", ci.Idx, err.Error()))
 		return err
 	}
+	defer ci.lock.Unlock()
+
+	logger.LogInfo(fmt.Sprintf("downloaded chunk [%d] from telegram", ci.Idx))
 	ci.Buf = bytes.NewBuffer(*bts)
 	ci.FileState = MEMORY
+
+	// moves the bytes out of ram
+	if cf.tmpFile != nil {
+		handle := cf.tmpFile.getFile()
+		_, err := handle.WriteAt(ci.GetBuffer().Bytes(), ci.Start)
+		if err != nil {
+			logger.LogErr(fmt.Sprintf("Failed to write chunk [%d] to tmp file: %s", ci.Idx, err.Error()))
+		} else {
+			ci.FileState = FILE
+			ci.Buf = nil
+			logger.LogInfo(fmt.Sprintf("Wrote chunk [%d] to tmp file", ci.Idx))
+		}
+	}
+
 	return nil
+}
+
+func (ci *ChunkItem) GetBytes(start, end int64, cf *ChunkFile) []byte {
+	logger.LogInfo(fmt.Sprintf("Getting bytes of chunk [%d]", ci.Idx))
+
+	switch ci.FileState {
+	case MEMORY:
+		return ci.Buf.Bytes()[start:end]
+	case FILE:
+		file := cf.tmpFile.getFile()
+		buf := make([]byte, ci.Size)
+		_, err := file.ReadAt(buf, ci.Start)
+		if err != nil {
+			logger.LogErr(fmt.Sprintf("Failed to read bytes for chunk [%d] from tmp file: %s", ci.Idx, err.Error()))
+		}
+		return buf
+	case UPLOADED:
+		logger.LogErr(fmt.Sprintf("Chunk [%d] has not been downloaded yet", ci.Idx))
+		return []byte{}
+	}
+
+	return []byte{}
 }
 
 func (ci *ChunkItem) PruneFromRam() {

@@ -1,11 +1,9 @@
 package services
 
 import (
-	"fmt"
 	"time"
 
 	"it.smaso/tgfuse/configs"
-	"it.smaso/tgfuse/logger"
 	"it.smaso/tgfuse/tgfuse"
 )
 
@@ -16,7 +14,7 @@ func StartGarbageCollector(rootNode *tgfuse.RootNode) {
 			if node, ok := rootNode.Nodes[name]; ok {
 				if node.ReadyForCleanup() {
 					node.ClearBuffers()
-					logger.LogInfo(fmt.Sprintf("Cleared buffers of %s", name))
+					// logger.LogInfo(fmt.Sprintf("Cleared buffers of %s", name))
 				}
 			}
 		}

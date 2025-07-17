@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path"
 	"slices"
@@ -17,8 +16,20 @@ import (
 // temporaryFile represents the temporary file containing the
 type temporaryFile struct {
 	name           string
-	handle         *fs.File
+	handle         *os.File
 	bytesAvailable int64 // contains the number of available bytes counting from 0
+}
+
+func (tf *temporaryFile) getFile() *os.File {
+	if tf.handle != nil {
+		return tf.handle
+	}
+	h, err := os.Open(tf.name)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to open existing temporary file: %s", err.Error()))
+	}
+	tf.handle = h
+	return tf.handle
 }
 
 // ChunkFile represents the aggregation of all the chunks
@@ -30,6 +41,7 @@ type ChunkFile struct {
 	NumChunks        int
 	Chunks           []ChunkItem
 	tmpFile          *temporaryFile
+	isDownloading    bool
 }
 
 // ReadChunkFile reads a file given its path and creates its correspondent chunk file
@@ -80,28 +92,43 @@ func SplitBytes(filename string, fileBytes *[]byte) (*ChunkFile, error) {
 	return &cf, nil
 }
 
-// PrefetcChunks downloads all the chunks which intersects the interval [start, end]
-func (cf *ChunkFile) PrefetchChunks(start, end int64) {
-	for idx := range cf.Chunks {
-		chunk := &cf.Chunks[idx]
-		if end <= chunk.Start || start >= chunk.End {
-			continue
-		}
-		if chunk.FileState == MEMORY {
-			continue
-		}
-		chunk.ForceLock()
-		go func(item *ChunkItem) {
-			if err := item.FetchBuffer(); err != nil {
-				logger.LogErr(fmt.Sprintf("Failed to fetch buffer %s", err.Error()))
-			}
-		}(chunk)
+func (cf *ChunkFile) StartDownload() {
+	if cf.isDownloading {
+		return
 	}
+
+	for idx := range cf.Chunks {
+		item := &cf.Chunks[idx]
+		item.ForceLock()
+	}
+
+	go func() {
+		for idx := range cf.Chunks {
+			item := &cf.Chunks[idx]
+			if err := item.FetchBuffer(cf); err != nil {
+				logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", item.Idx, err.Error()))
+			}
+		}
+	}()
 }
 
 func (cf *ChunkFile) GetBytes(start, end int64) []byte {
-	if cf.tmpFile != nil && cf.tmpFile.bytesAvailable >= end {
-		// handle := cf.tmpFile.handle
+	if cf.tmpFile == nil {
+		if err := os.MkdirAll(configs.TMP_FILE_FOLDER, 0o755); err != nil {
+			logger.LogErr(fmt.Sprintf("Failed to create tmp dir: %s", err.Error()))
+		}
+		filepath := path.Join(configs.TMP_FILE_FOLDER, cf.Id)
+		file, err := os.Create(filepath)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to open temporary file %s -> %s", filepath, err.Error()))
+		}
+		file.Truncate(int64(cf.OriginalSize))
+
+		cf.tmpFile = &temporaryFile{
+			name:           filepath,
+			bytesAvailable: 0,
+			handle:         file,
+		}
 	}
 
 	var result []byte
@@ -115,17 +142,18 @@ func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 		relativeStart := max(0, start-chunk.Start)
 		relativeEnd := min(chunk.End-chunk.Start, end-chunk.Start)
 
-		chunk.lock.Lock()
-		buf := chunk.Buf.Bytes()
+		logger.LogErr(fmt.Sprintf("Locking ChunkFile GetBytes on chunk [%d]", chunk.Idx))
+		chunk.ForceLock()
 
-		if relativeStart >= int64(len(buf)) || relativeEnd > int64(len(buf)) {
-			logger.LogErr(fmt.Sprintf("Invalid range [%d:%d] for chunk %d (buffer size %d)", relativeStart, relativeEnd, chunk.Idx, len(buf)))
+		if relativeStart >= int64(chunk.Size) || relativeEnd > int64(chunk.Size) {
+			logger.LogErr(fmt.Sprintf("Invalid range [%d:%d] for chunk %d (buffer size %d)", relativeStart, relativeEnd, chunk.Idx, chunk.Size))
 			chunk.lock.Unlock()
 			continue
 		}
 
 		logger.LogInfo(fmt.Sprintf("Copying bytes from chunk %d [%d:%d]", idx, relativeStart, relativeEnd))
-		result = append(result, buf[relativeStart:relativeEnd]...)
+		readBuf := chunk.GetBytes(relativeStart, relativeEnd, cf)
+		result = append(result, readBuf...)
 		chunk.lock.Unlock()
 	}
 

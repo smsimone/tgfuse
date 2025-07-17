@@ -93,7 +93,6 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 				errs = append(errs, fmt.Errorf("failed to restore cf: %v", err))
 				return
 			}
-			logger.LogInfo("Restored ChunkFile keys")
 
 			var curr int64 = 0
 			for ciIdx := range cf.NumChunks {
@@ -107,10 +106,10 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 					cf.Chunks = append(cf.Chunks, ci)
 				}
 			}
-			logger.LogInfo(fmt.Sprintf("Restored chunkItems for file %s", cf.OriginalFilename))
+			// logger.LogInfo(fmt.Sprintf("Restored chunkItems for file %s", cf.OriginalFilename))
 
 			chunkFiles = append(chunkFiles, cf)
-			logger.LogInfo(fmt.Sprintf("Restored file %s", cf.OriginalFilename))
+			// logger.LogInfo(fmt.Sprintf("Restored file %s", cf.OriginalFilename))
 		}((*cfIds)[idx])
 	}
 	wg.Wait()
