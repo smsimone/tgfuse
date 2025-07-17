@@ -84,7 +84,6 @@ func (l *Logger) Log(level Level, message string) {
 	select {
 	case logChan <- fmt.Sprintf("[%s] %s", level, message):
 	default:
-
 		log.Println("Log channel is full, dropping message")
 	}
 }

@@ -201,22 +201,21 @@ func (cf *ChunkFile) StartDownload() {
 
 	cf.isDownloading = true
 
-	for idx := range cf.Chunks {
-		go func(item *ChunkItem) {
-			if item.shouldBeDownloaded() {
-				item.lock.Lock()
-				logger.LogInfo(fmt.Sprintf("Locked chunk [%d] to be downloaded", item.Idx))
-				go func() {
-					defer item.lock.Unlock()
-					if err := item.fetchBuffer(cf); err != nil {
-						logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", item.Idx, err.Error()))
-					}
-				}()
+	go func() {
+		for idx := range cf.Chunks {
+			ci := cf.Chunks[idx]
+			if ci.shouldBeDownloaded() {
+				ci.lock.Lock()
+				logger.LogInfo(fmt.Sprintf("Locked chunk [%d] to be downloaded", ci.Idx))
+				if err := ci.fetchBuffer(cf); err != nil {
+					logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", ci.Idx, err.Error()))
+				}
+				ci.lock.Unlock()
+				logger.LogInfo(fmt.Sprintf("Unlocked chunk [%d]", ci.Idx))
 			}
-		}(cf.Chunks[idx])
-	}
-
-	cf.isDownloading = false
+		}
+		cf.isDownloading = false
+	}()
 }
 
 func (cf *ChunkFile) GetBytes(start, end int64) []byte {

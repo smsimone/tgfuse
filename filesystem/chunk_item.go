@@ -124,8 +124,10 @@ func (ci *ChunkItem) fetchBuffer(cf *ChunkFile) error {
 }
 
 func (ci *ChunkItem) GetBytes(start, end int64, cf *ChunkFile) []byte {
+	logger.LogInfo(fmt.Sprintf("Chunk [%d] locked on read lock", ci.Idx))
 	ci.lock.RLocker().Lock()
 	defer ci.lock.RLocker().Unlock()
+	logger.LogInfo(fmt.Sprintf("Chunk [%d] just got released from read lock", ci.Idx))
 
 	logger.LogInfo(fmt.Sprintf("Getting bytes of chunk [%d]", ci.Idx))
 
