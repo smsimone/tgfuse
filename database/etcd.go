@@ -96,7 +96,7 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 
 			var curr int64 = 0
 			for ciIdx := range cf.NumChunks {
-				ci := filesystem.ChunkItem{Idx: ciIdx, ChunkFileId: cfID, Start: curr}
+				ci := filesystem.ChunkItem{Idx: ciIdx, ChunkFileId: cfID, Start: curr, FileState: filesystem.UPLOADED}
 				kci := KeyedChunkItem{chunkItem: &ci}
 				if err := e.Restore(&kci); err != nil {
 					logger.LogErr(fmt.Sprintf("Failed to restore cf %s", err.Error()))

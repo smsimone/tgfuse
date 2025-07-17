@@ -92,8 +92,7 @@ func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 		return cf.File.Chunks[i].Idx < cf.File.Chunks[j].Idx
 	})
 
-	bytes := cf.File.GetBytes(off, end)
-	return fuse.ReadResultData(bytes), 0
+	return fuse.ReadResultData(cf.File.GetBytes(off, end)), 0
 }
 
 func (cf *CfInode) Open(ctx context.Context, openFlags uint32) (fs.FileHandle, uint32, syscall.Errno) {

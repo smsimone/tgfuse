@@ -96,20 +96,29 @@ func (cf *ChunkFile) StartDownload() {
 	if cf.isDownloading {
 		return
 	}
+	cf.isDownloading = true
 
 	for idx := range cf.Chunks {
 		item := &cf.Chunks[idx]
-		item.ForceLock()
+		if item.shouldBeDownloaded() {
+			logger.LogInfo(fmt.Sprintf("Locked chunk [%d] to be downloaded (%s)", item.Idx, item.FileState))
+			item.ForceLock()
+		}
 	}
 
 	go func() {
 		for idx := range cf.Chunks {
 			item := &cf.Chunks[idx]
+			if !item.shouldBeDownloaded() {
+				continue
+			}
 			if err := item.FetchBuffer(cf); err != nil {
 				logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", item.Idx, err.Error()))
 			}
 		}
 	}()
+
+	cf.isDownloading = false
 }
 
 func (cf *ChunkFile) GetBytes(start, end int64) []byte {
@@ -142,19 +151,16 @@ func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 		relativeStart := max(0, start-chunk.Start)
 		relativeEnd := min(chunk.End-chunk.Start, end-chunk.Start)
 
-		logger.LogErr(fmt.Sprintf("Locking ChunkFile GetBytes on chunk [%d]", chunk.Idx))
-		chunk.ForceLock()
-
-		if relativeStart >= int64(chunk.Size) || relativeEnd > int64(chunk.Size) {
+		chunkSize := int64(chunk.Size)
+		if relativeStart >= chunkSize || relativeEnd > chunkSize {
 			logger.LogErr(fmt.Sprintf("Invalid range [%d:%d] for chunk %d (buffer size %d)", relativeStart, relativeEnd, chunk.Idx, chunk.Size))
-			chunk.lock.Unlock()
 			continue
 		}
 
 		logger.LogInfo(fmt.Sprintf("Copying bytes from chunk %d [%d:%d]", idx, relativeStart, relativeEnd))
 		readBuf := chunk.GetBytes(relativeStart, relativeEnd, cf)
 		result = append(result, readBuf...)
-		chunk.lock.Unlock()
+		logger.LogInfo(fmt.Sprintf("Unlocked chunk [%d]", chunk.Idx))
 	}
 
 	return result
