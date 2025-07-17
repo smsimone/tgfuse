@@ -10,7 +10,7 @@ import (
 var instance DatabaseConnection
 
 type DatabaseConnection interface {
-	GetAllChunkFiles() (*[]filesystem.ChunkFile, error)
+	GetAllChunkFiles() (*[]*filesystem.ChunkFile, error)
 	UploadFile(cf *filesystem.ChunkFile) error
 }
 

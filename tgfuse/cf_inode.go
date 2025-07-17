@@ -54,7 +54,7 @@ func (cf *CfInode) ReadyForCleanup() bool {
 
 func (cf *CfInode) ClearBuffers() {
 	for idx := range cf.File.Chunks {
-		ci := &cf.File.Chunks[idx]
+		ci := cf.File.Chunks[idx]
 		ci.PruneFromRam()
 	}
 }

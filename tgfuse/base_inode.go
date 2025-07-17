@@ -157,7 +157,7 @@ func (bi *virtualInode) Flush(ctx context.Context, f fs.FileHandle) syscall.Errn
 	for idx := range bi.chunks {
 		chunk := bi.chunks[idx]
 		logger.LogInfo(fmt.Sprintf("Chunk: [%d] State: [%s] Id: [%p]", chunk.Idx, chunk.FileState, chunk.FileId))
-		bi.cf.Chunks = append(bi.cf.Chunks, *chunk)
+		bi.cf.Chunks = append(bi.cf.Chunks, chunk)
 	}
 	bi.cf.NumChunks = len(bi.chunks)
 	bi.cf.OriginalSize = int(bi.fileSize)

@@ -40,7 +40,6 @@ func (tf *temporaryFile) getLastAccessTime() (*time.Time, error) {
 		return nil, err
 	} else {
 		if at := atime.GetAtime(stat); at == nil {
-			logger.LogWarn("Failed to get access time, returning mod time")
 			modTime := stat.ModTime()
 			return &modTime, nil
 		} else {
@@ -58,7 +57,7 @@ type ChunkFile struct {
 	OriginalFilename string
 	OriginalSize     int
 	NumChunks        int
-	Chunks           []ChunkItem
+	Chunks           []*ChunkItem
 	tmpFile          *temporaryFile
 	isDownloading    bool
 	readyMutex       sync.Mutex
@@ -67,7 +66,7 @@ type ChunkFile struct {
 
 func NewChunkFile(opts ...ChunkFileOpt) *ChunkFile {
 	cf := &ChunkFile{
-		Chunks:          []ChunkItem{},
+		Chunks:          []*ChunkItem{},
 		readyToDownload: false,
 	}
 	cf.readyMutex.Lock()
@@ -91,16 +90,23 @@ func WithId(id string) func(*ChunkFile) {
 }
 
 func (cf *ChunkFile) Enable() {
+	logger.LogInfo(fmt.Sprintf("File '%s' is now ready to be read", cf.OriginalFilename))
 	cf.readyMutex.Unlock()
 	cf.readyToDownload = true
-	logger.LogInfo(fmt.Sprintf("File '%s' is now ready to be read", cf.OriginalFilename))
+	logger.LogInfo(fmt.Sprintf("File '%s' -> %v [%p]", cf.OriginalFilename, cf.readyToDownload, cf))
+	logger.LogInfo(fmt.Sprintf("File '%s' has %d chunks [%p]", cf.OriginalFilename, len(cf.Chunks), cf))
 }
 
 func (cf *ChunkFile) WaitForReadable() {
+	logger.LogInfo(fmt.Sprintf("Waiting for file to be readable -> %v [%p]", cf.readyToDownload, cf))
 	if !cf.readyToDownload {
+		logger.LogInfo("Locking on wait for readable")
 		cf.readyMutex.Lock()
 		defer cf.readyMutex.Unlock()
 		cf.readyToDownload = true
+		logger.LogInfo("File is now readable")
+	} else {
+		logger.LogInfo("Chunkfile is already ready")
 	}
 }
 
@@ -123,7 +129,7 @@ func (cf *ChunkFile) DeleteTmpFile() {
 		}
 		cf.tmpFile = nil
 		for idx := range cf.Chunks {
-			ci := &cf.Chunks[idx]
+			ci := cf.Chunks[idx]
 			ci.FileState = UPLOADED
 		}
 	}
@@ -164,10 +170,10 @@ func SplitBytes(filename string, fileBytes *[]byte) (*ChunkFile, error) {
 		Id:               uuid.NewString(),
 	}
 
-	var ci []ChunkItem
+	var ci []*ChunkItem
 	var count int = 0
 	for chunk := range slices.Chunk(*fileBytes, configs.CHUNK_SIZE) {
-		ci = append(ci, ChunkItem{
+		ci = append(ci, &ChunkItem{
 			Idx:         count,
 			Size:        len(chunk),
 			Name:        uuid.NewString(),
@@ -196,17 +202,18 @@ func (cf *ChunkFile) StartDownload() {
 	cf.isDownloading = true
 
 	for idx := range cf.Chunks {
-		item := &cf.Chunks[idx]
-		if item.shouldBeDownloaded() {
-			item.lock.Lock()
-			logger.LogInfo(fmt.Sprintf("Locked chunk [%d] to be downloaded (%s)", item.Idx, item.FileState))
-			go func() {
-				defer item.lock.Unlock()
-				if err := item.fetchBuffer(cf); err != nil {
-					logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", item.Idx, err.Error()))
-				}
-			}()
-		}
+		go func(item *ChunkItem) {
+			if item.shouldBeDownloaded() {
+				item.lock.Lock()
+				logger.LogInfo(fmt.Sprintf("Locked chunk [%d] to be downloaded", item.Idx))
+				go func() {
+					defer item.lock.Unlock()
+					if err := item.fetchBuffer(cf); err != nil {
+						logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", item.Idx, err.Error()))
+					}
+				}()
+			}
+		}(cf.Chunks[idx])
 	}
 
 	cf.isDownloading = false
@@ -230,7 +237,7 @@ func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 
 	var result []byte
 	for idx := range cf.Chunks {
-		chunk := &cf.Chunks[idx]
+		chunk := cf.Chunks[idx]
 
 		if end <= chunk.Start || start >= chunk.End {
 			continue
@@ -264,7 +271,7 @@ func (cf *ChunkFile) WriteFile(outFile string) error {
 	defer file.Close()
 
 	for idx := range cf.Chunks {
-		chunk := &cf.Chunks[idx]
+		chunk := cf.Chunks[idx]
 		if chunk.Buf == nil {
 			return fmt.Errorf("buffer was nil for chunk %d", chunk.Idx)
 		}

@@ -16,7 +16,7 @@ import (
 
 func UpdateFiles(rn *tgfuse.RootNode) {
 	for {
-		files, err:= db.Connect(configs.DB_CONFIG).GetAllChunkFiles()
+		files, err := db.Connect(configs.DB_CONFIG).GetAllChunkFiles()
 		if err != nil {
 			logger.LogErr(fmt.Sprintf("Failed to retrieve remote files: %s", err.Error()))
 		}
@@ -29,7 +29,7 @@ func UpdateFiles(rn *tgfuse.RootNode) {
 		for idx := range *files {
 			cf := (*files)[idx]
 			if _, found := rn.Nodes[cf.OriginalFilename]; !found {
-				addMissingFile(&cf, rn)
+				addMissingFile(cf, rn)
 			} else {
 				toDelete[cf.OriginalFilename] = false
 			}

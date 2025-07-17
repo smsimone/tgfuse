@@ -55,7 +55,7 @@ func (e *etcdClient) UploadFile(cf *filesystem.ChunkFile) error {
 	}
 
 	for idx := range cf.Chunks {
-		chunk := &cf.Chunks[idx]
+		chunk := cf.Chunks[idx]
 		if chunk.FileId == nil {
 			panic("Somehow the file id came null")
 		}
@@ -69,7 +69,7 @@ func (e *etcdClient) UploadFile(cf *filesystem.ChunkFile) error {
 	return nil
 }
 
-func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
+func (e *etcdClient) GetAllChunkFiles() (*[]*filesystem.ChunkFile, error) {
 	cfIds, err := e.GetAllFileIds()
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 
 	logger.LogInfo(fmt.Sprintf("Retrieved %d cfIds", len(*cfIds)))
 
-	var chunkFiles []filesystem.ChunkFile
+	var chunkFiles []*filesystem.ChunkFile
 	wg := sync.WaitGroup{}
 
 	errs := make([]error, 0)
@@ -95,29 +95,31 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 			}
 
 			var curr int64 = 0
-			go func(chunk *filesystem.ChunkFile) {
-				for ciIdx := range chunk.NumChunks {
-					ci := filesystem.NewChunkItem(
-						filesystem.WithIdx(ciIdx),
-						filesystem.WithChunkFileId(chunk.Id),
-						filesystem.WithStart(curr),
-					)
-					kci := KeyedChunkItem{chunkItem: ci}
-					if err := e.Restore(&kci); err != nil {
-						logger.LogErr(fmt.Sprintf("Failed to restore cf %s", err.Error()))
-					} else {
-						ci.End = ci.Start + int64(ci.Size)
-						curr += int64(ci.Size)
-						if cf.HasBytes(ci.Start, ci.End) {
-							ci.FileState = filesystem.FILE
-						}
-						chunk.Chunks = append(chunk.Chunks, *ci)
+
+			for ciIdx := range cf.NumChunks {
+				ci := filesystem.NewChunkItem(
+					filesystem.WithIdx(ciIdx),
+					filesystem.WithChunkFileId(cf.Id),
+					filesystem.WithStart(curr),
+				)
+
+				kci := KeyedChunkItem{chunkItem: ci}
+				if err := e.Restore(&kci); err != nil {
+					logger.LogErr(fmt.Sprintf("Failed to restore cf %s", err.Error()))
+				} else {
+					ci.End = ci.Start + int64(ci.Size)
+					curr += int64(ci.Size)
+					if cf.HasBytes(ci.Start, ci.End) {
+						ci.FileState = filesystem.FILE
 					}
 				}
-				chunk.Enable()
-			}(cf)
 
-			chunkFiles = append(chunkFiles, *cf)
+				cf.Chunks = append(cf.Chunks, ci)
+			}
+
+			cf.Enable()
+
+			chunkFiles = append(chunkFiles, cf)
 		}((*cfIds)[idx])
 	}
 	wg.Wait()

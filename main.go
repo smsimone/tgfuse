@@ -63,7 +63,7 @@ func main() {
 		files, _ := database.GetAllChunkFiles()
 		for idx := range *files {
 			ctx := context.Background()
-			file := tgfuse.CfInode{File: &(*files)[idx]}
+			file := tgfuse.CfInode{File: (*files)[idx]}
 
 			ch := root.NewInode(
 				ctx,
