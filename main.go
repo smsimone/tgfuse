@@ -23,6 +23,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	checkTmpDir()
+
 	root := tgfuse.NewRoot()
 
 	database := db.Connect(configs.DB_CONFIG)
@@ -89,4 +91,15 @@ func main() {
 	}
 	logger.LogInfo("Mounted successfully")
 	server.Wait()
+}
+
+func checkTmpDir() {
+	logger.LogInfo("Checking existance of temporary folder")
+	if _, err := os.Stat(configs.TMP_FILE_FOLDER); err != nil {
+		if err := os.MkdirAll(configs.TMP_FILE_FOLDER, 0o755); err != nil {
+			logger.LogErr(fmt.Sprintf("Failed to create tmp dir: %s", err.Error()))
+		} else {
+			logger.LogInfo("Created temporary folder")
+		}
+	}
 }

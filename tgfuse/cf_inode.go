@@ -49,7 +49,7 @@ func (cf *CfInode) ReadyForCleanup() bool {
 		return false
 	}
 	delay := time.Since(cf.lastRead).Seconds()
-	return delay > float64(configs.CHUNK_TTL)
+	return delay > float64(configs.RAM_TTL)
 }
 
 func (cf *CfInode) ClearBuffers() {
@@ -77,6 +77,7 @@ func (cf *CfInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (cf *CfInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	cf.File.WaitForReadable()
 	cf.File.StartDownload()
 
 	logger.LogInfo(fmt.Sprintf("Reading content of file %s", cf.File.OriginalFilename))

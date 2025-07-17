@@ -149,9 +149,13 @@ func (ci *ChunkItem) GetBytes(start, end int64, cf *ChunkFile) []byte {
 }
 
 func (ci *ChunkItem) PruneFromRam() {
-	if ci.FileState == MEMORY {
+	switch ci.FileState {
+	case MEMORY:
 		ci.Buf = nil
 		ci.FileState = UPLOADED
 		ci.Buf = &bytes.Buffer{}
+	case FILE:
+		ci.Buf = nil
+		ci.FileState = UPLOADED
 	}
 }

@@ -36,7 +36,8 @@ var (
 	TG_CHAT_ID            = "17369111"
 	LOG_FILE              = "tgfuse.log" // "/var/log/tgfuse/tgfuse.log"
 	GC_DELAY              = 4            // seconds
-	CHUNK_TTL             = 5 * 60       // seconds
+	FILE_TTL              = 86400 * 4    // seconds -- 4 days
+	RAM_TTL               = 20 * 60      // seconds - 20 minutes
 	FILES_UPDATE          = 5            // seconds
 	DB_CONFIG    DBConfig = &EtcdConfig{
 		URL: "89.168.16.172:2379",

@@ -7,9 +7,12 @@ import (
 	"os"
 	"path"
 	"slices"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"it.smaso/tgfuse/configs"
+	"it.smaso/tgfuse/filesystem/atime"
 	"it.smaso/tgfuse/logger"
 )
 
@@ -32,6 +35,22 @@ func (tf *temporaryFile) getFile() *os.File {
 	return tf.handle
 }
 
+func (tf *temporaryFile) getLastAccessTime() (*time.Time, error) {
+	if stat, err := os.Stat(tf.name); err != nil {
+		return nil, err
+	} else {
+		if at := atime.GetAtime(stat); at == nil {
+			logger.LogWarn("Failed to get access time, returning mod time")
+			modTime := stat.ModTime()
+			return &modTime, nil
+		} else {
+			return at, nil
+		}
+	}
+}
+
+type ChunkFileOpt = func(*ChunkFile)
+
 // ChunkFile represents the aggregation of all the chunks
 type ChunkFile struct {
 	Ino              uint64
@@ -42,6 +61,79 @@ type ChunkFile struct {
 	Chunks           []ChunkItem
 	tmpFile          *temporaryFile
 	isDownloading    bool
+	readyMutex       sync.Mutex
+	readyToDownload  bool
+}
+
+func NewChunkFile(opts ...ChunkFileOpt) *ChunkFile {
+	cf := &ChunkFile{
+		Chunks:          []ChunkItem{},
+		readyToDownload: false,
+	}
+	cf.readyMutex.Lock()
+	for _, opt := range opts {
+		opt(cf)
+	}
+	return cf
+}
+func WithId(id string) func(*ChunkFile) {
+	return func(cf *ChunkFile) {
+		cf.Id = id
+
+		filepath := path.Join(configs.TMP_FILE_FOLDER, cf.Id)
+		if stat, err := os.Stat(filepath); err == nil {
+			cf.tmpFile = &temporaryFile{
+				name:           filepath,
+				bytesAvailable: stat.Size(),
+			}
+		}
+	}
+}
+
+func (cf *ChunkFile) Enable() {
+	cf.readyMutex.Unlock()
+	cf.readyToDownload = true
+	logger.LogInfo(fmt.Sprintf("File '%s' is now ready to be read", cf.OriginalFilename))
+}
+
+func (cf *ChunkFile) WaitForReadable() {
+	if !cf.readyToDownload {
+		cf.readyMutex.Lock()
+		defer cf.readyMutex.Unlock()
+		cf.readyToDownload = true
+	}
+}
+
+func (cf *ChunkFile) ReadyToClean() bool {
+	if cf.tmpFile == nil {
+		return true
+	}
+	lastAccess, err := cf.tmpFile.getLastAccessTime()
+	if err != nil {
+		logger.LogErr(fmt.Sprintf("Failed to read last access time: %s", err.Error()))
+		return false
+	}
+	return time.Since(*lastAccess).Seconds() > float64(configs.FILE_TTL)
+}
+
+func (cf *ChunkFile) DeleteTmpFile() {
+	if cf.tmpFile != nil {
+		if err := os.Remove(cf.tmpFile.name); err != nil {
+			logger.LogErr(fmt.Sprintf("Failed to delete temporary file %s: %s", cf.tmpFile.name, err.Error()))
+		}
+		cf.tmpFile = nil
+		for idx := range cf.Chunks {
+			ci := &cf.Chunks[idx]
+			ci.FileState = UPLOADED
+		}
+	}
+}
+
+func (cf *ChunkFile) HasBytes(start, end int64) bool {
+	if cf.tmpFile == nil {
+		return false
+	}
+	return cf.tmpFile.bytesAvailable >= end
 }
 
 // ReadChunkFile reads a file given its path and creates its correspondent chunk file
@@ -92,10 +184,15 @@ func SplitBytes(filename string, fileBytes *[]byte) (*ChunkFile, error) {
 	return &cf, nil
 }
 
+// StartDownload locks and starts the download of all the chunks, if needed
 func (cf *ChunkFile) StartDownload() {
 	if cf.isDownloading {
 		return
 	}
+	if cf.tmpFile != nil && cf.tmpFile.bytesAvailable == int64(cf.OriginalSize) {
+		return
+	}
+
 	cf.isDownloading = true
 
 	for idx := range cf.Chunks {
@@ -117,9 +214,6 @@ func (cf *ChunkFile) StartDownload() {
 
 func (cf *ChunkFile) GetBytes(start, end int64) []byte {
 	if cf.tmpFile == nil {
-		if err := os.MkdirAll(configs.TMP_FILE_FOLDER, 0o755); err != nil {
-			logger.LogErr(fmt.Sprintf("Failed to create tmp dir: %s", err.Error()))
-		}
 		filepath := path.Join(configs.TMP_FILE_FOLDER, cf.Id)
 		file, err := os.Create(filepath)
 		if err != nil {

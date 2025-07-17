@@ -85,8 +85,8 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 		wg.Add(1)
 		go func(cfID string) {
 			defer wg.Done()
-			cf := filesystem.ChunkFile{Id: cfID, Chunks: []filesystem.ChunkItem{}}
-			keyed := KeyedChunkFile{chunkFile: &cf}
+			cf := filesystem.NewChunkFile(filesystem.WithId(cfID))
+			keyed := KeyedChunkFile{chunkFile: cf}
 
 			if err := e.Restore(&keyed); err != nil {
 				logger.LogErr(fmt.Sprintf("Failed to restore cf: %s", err.Error()))
@@ -95,23 +95,29 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 			}
 
 			var curr int64 = 0
-			for ciIdx := range cf.NumChunks {
-				ci := filesystem.NewChunkItem(
-					filesystem.WithIdx(ciIdx),
-					filesystem.WithChunkFileId(cfID),
-					filesystem.WithStart(curr),
-				)
-				kci := KeyedChunkItem{chunkItem: ci}
-				if err := e.Restore(&kci); err != nil {
-					logger.LogErr(fmt.Sprintf("Failed to restore cf %s", err.Error()))
-				} else {
-					ci.End = ci.Start + int64(ci.Size)
-					curr += int64(ci.Size)
-					cf.Chunks = append(cf.Chunks, *ci)
+			go func(chunk *filesystem.ChunkFile) {
+				for ciIdx := range chunk.NumChunks {
+					ci := filesystem.NewChunkItem(
+						filesystem.WithIdx(ciIdx),
+						filesystem.WithChunkFileId(chunk.Id),
+						filesystem.WithStart(curr),
+					)
+					kci := KeyedChunkItem{chunkItem: ci}
+					if err := e.Restore(&kci); err != nil {
+						logger.LogErr(fmt.Sprintf("Failed to restore cf %s", err.Error()))
+					} else {
+						ci.End = ci.Start + int64(ci.Size)
+						curr += int64(ci.Size)
+						if cf.HasBytes(ci.Start, ci.End) {
+							ci.FileState = filesystem.FILE
+						}
+						chunk.Chunks = append(chunk.Chunks, *ci)
+					}
 				}
-			}
+				chunk.Enable()
+			}(cf)
 
-			chunkFiles = append(chunkFiles, cf)
+			chunkFiles = append(chunkFiles, *cf)
 		}((*cfIds)[idx])
 	}
 	wg.Wait()
@@ -224,13 +230,22 @@ func (e *etcdClient) SendFile(obj Keyed) error {
 
 func (e *etcdClient) Restore(obj Keyed) error {
 	params := obj.GetKeyParams()
-	for _, item := range params {
-		val, err := e.getKey(item.Key)
-		if err != nil {
-			return SendKeyErr{Key: item.Key, Err: err}
-		}
-		item.SetValue(val)
+	wg := sync.WaitGroup{}
+
+	errors := []error{}
+	for idx := range params {
+		wg.Add(1)
+		go func(item *KeyParam) {
+			defer wg.Done()
+			val, err := e.getKey(item.Key)
+			if err != nil {
+				errors = append(errors, SendKeyErr{Key: item.Key, Err: err})
+			}
+			item.SetValue(val)
+		}(&params[idx])
 	}
+	wg.Wait()
+
 	return nil
 }
 
