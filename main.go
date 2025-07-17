@@ -6,12 +6,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"it.smaso/tgfuse/configs"
 	db "it.smaso/tgfuse/database"
 	"it.smaso/tgfuse/logger"
+	"it.smaso/tgfuse/services"
 	"it.smaso/tgfuse/tgfuse"
 )
 
@@ -78,11 +80,11 @@ func main() {
 		}
 		logger.LogInfo("Added all the entries to root")
 
-		// go func() {
-		// 	time.Sleep(5 * time.Second)
-		// 	logger.LogInfo("Started updateFiles service")
-		// 	go services.UpdateFiles(root)
-		// }()
+		go func() {
+			time.Sleep(5 * time.Second)
+			logger.LogInfo("Started updateFiles service")
+			go services.UpdateFiles(root)
+		}()
 	}()
 
 	if err != nil {
