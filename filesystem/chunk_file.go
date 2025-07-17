@@ -101,22 +101,16 @@ func (cf *ChunkFile) StartDownload() {
 	for idx := range cf.Chunks {
 		item := &cf.Chunks[idx]
 		if item.shouldBeDownloaded() {
+			item.lock.Lock()
 			logger.LogInfo(fmt.Sprintf("Locked chunk [%d] to be downloaded (%s)", item.Idx, item.FileState))
-			item.ForceLock()
+			go func() {
+				defer item.lock.Unlock()
+				if err := item.fetchBuffer(cf); err != nil {
+					logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", item.Idx, err.Error()))
+				}
+			}()
 		}
 	}
-
-	go func() {
-		for idx := range cf.Chunks {
-			item := &cf.Chunks[idx]
-			if !item.shouldBeDownloaded() {
-				continue
-			}
-			if err := item.FetchBuffer(cf); err != nil {
-				logger.LogErr(fmt.Sprintf("Failed to download chunk item [%d]: %s", item.Idx, err.Error()))
-			}
-		}
-	}()
 
 	cf.isDownloading = false
 }

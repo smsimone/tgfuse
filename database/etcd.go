@@ -96,20 +96,22 @@ func (e *etcdClient) GetAllChunkFiles() (*[]filesystem.ChunkFile, error) {
 
 			var curr int64 = 0
 			for ciIdx := range cf.NumChunks {
-				ci := filesystem.ChunkItem{Idx: ciIdx, ChunkFileId: cfID, Start: curr, FileState: filesystem.UPLOADED}
-				kci := KeyedChunkItem{chunkItem: &ci}
+				ci := filesystem.NewChunkItem(
+					filesystem.WithIdx(ciIdx),
+					filesystem.WithChunkFileId(cfID),
+					filesystem.WithStart(curr),
+				)
+				kci := KeyedChunkItem{chunkItem: ci}
 				if err := e.Restore(&kci); err != nil {
 					logger.LogErr(fmt.Sprintf("Failed to restore cf %s", err.Error()))
 				} else {
 					ci.End = ci.Start + int64(ci.Size)
 					curr += int64(ci.Size)
-					cf.Chunks = append(cf.Chunks, ci)
+					cf.Chunks = append(cf.Chunks, *ci)
 				}
 			}
-			// logger.LogInfo(fmt.Sprintf("Restored chunkItems for file %s", cf.OriginalFilename))
 
 			chunkFiles = append(chunkFiles, cf)
-			// logger.LogInfo(fmt.Sprintf("Restored file %s", cf.OriginalFilename))
 		}((*cfIds)[idx])
 	}
 	wg.Wait()

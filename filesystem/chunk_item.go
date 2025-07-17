@@ -3,7 +3,6 @@ package filesystem
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"sync"
 
 	"it.smaso/tgfuse/logger"
@@ -11,6 +10,7 @@ import (
 )
 
 type Status = string
+type ChunkItemOpts = func(*ChunkItem)
 
 const (
 	UPLOADED Status = "uploaded"
@@ -27,11 +27,38 @@ type ChunkItem struct {
 	FileId        *string
 	FileState     Status
 	ChunkFileId   string
-	lock          sync.Mutex
+	lock          sync.RWMutex
 	isDownloading bool
 
 	Start int64
 	End   int64
+}
+
+func NewChunkItem(opts ...ChunkItemOpts) *ChunkItem {
+	inst := &ChunkItem{
+		isDownloading: false,
+		FileState:     UPLOADED,
+	}
+	for _, opt := range opts {
+		opt(inst)
+	}
+	return inst
+}
+
+func WithIdx(idx int) func(*ChunkItem) {
+	return func(ci *ChunkItem) {
+		ci.Idx = idx
+	}
+}
+func WithChunkFileId(cfId string) func(*ChunkItem) {
+	return func(ci *ChunkItem) {
+		ci.ChunkFileId = cfId
+	}
+}
+func WithStart(start int64) func(*ChunkItem) {
+	return func(ci *ChunkItem) {
+		ci.Start = start
+	}
 }
 
 func (ci *ChunkItem) GetBuffer() *bytes.Buffer {
@@ -58,39 +85,19 @@ func (ci *ChunkItem) Send() error {
 	return nil
 }
 
-func (ci *ChunkItem) ForceLock() {
-	ci.lock.Lock()
-	logger.LogInfo(fmt.Sprintf("Locked chunk [%d]", ci.Idx))
-}
-
+// shouldBeDownloaded check wether the chunk must be downloaded or if it's already downloaded
 func (ci *ChunkItem) shouldBeDownloaded() bool {
 	if ci.isDownloading {
 		return false
 	}
-	return ci.FileState != MEMORY && ci.FileState != FILE
+	return ci.FileState != FILE && ci.FileState != MEMORY
 }
 
-func (ci *ChunkItem) checkTemporaryFile(cf *ChunkFile) bool {
-	if cf.tmpFile == nil {
-		return false
-	}
-	if _, err := os.Stat(cf.tmpFile.name); err != nil {
-		return false
-	}
-	return true
-}
-
-func (ci *ChunkItem) FetchBuffer(cf *ChunkFile) error {
+func (ci *ChunkItem) fetchBuffer(cf *ChunkFile) error {
+	ci.isDownloading = true
 	defer func() {
-		ci.lock.Unlock()
 		ci.isDownloading = false
 	}()
-
-	if !ci.shouldBeDownloaded() {
-		return nil
-	}
-
-	ci.isDownloading = true
 
 	bts, err := telegram.GetInstance().DownloadFile(*ci.FileId)
 	if err != nil {
@@ -117,8 +124,8 @@ func (ci *ChunkItem) FetchBuffer(cf *ChunkFile) error {
 }
 
 func (ci *ChunkItem) GetBytes(start, end int64, cf *ChunkFile) []byte {
-	ci.lock.Lock()
-	defer ci.lock.Unlock()
+	ci.lock.RLocker().Lock()
+	defer ci.lock.RLocker().Unlock()
 
 	logger.LogInfo(fmt.Sprintf("Getting bytes of chunk [%d]", ci.Idx))
 
